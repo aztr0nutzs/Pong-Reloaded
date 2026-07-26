@@ -1,0 +1,2310 @@
+
+class AIController {
+    constructor(engine, predictor, thrower) {
+        this.engine = engine;
+        this.predictor = predictor;
+        this.thrower = thrower;
+        this.DIFF_AI_HIT = { easy:0.30, normal:0.44, hard:0.58 };
+    }
+    
+    /* AI opponent: randomness here decides the AI's aim quality (its
+       in-game "skill" per difficulty) — that's opponent behavior, not the
+       physics. Whatever aim point the AI ends up choosing is then resolved
+       by the exact same deterministic physics engine used for the player. */
+    performAiThrow(){
+      var m = state.match;
+      if(!m || !m.active || m.paused || m.autoPaused) return;
+      m.busy = true;
+      resetBallPosition('ai');
+      var diffChance = this.DIFF_AI_HIT[state.settings.difficulty] || 0.44;
+      var aimsWell = Math.random() < diffChance;
+      var remainingCups = qsa('#player-cups .cup:not(.hit)');
+      var target = remainingCups.length ? pick(remainingCups) : null;
+      if(!target){ finishMatch('lose'); m.busy=false; return; }
+
+      var ballRect = $('ball').getBoundingClientRect();
+      var ballStart = { x: ballRect.left + ballRect.width/2, y: ballRect.top + ballRect.height/2, z:6 };
+      var tr = target.getBoundingClientRect();
+      var tx = tr.left + tr.width/2, ty = tr.top + tr.height/2;
+      if(!aimsWell){
+        // A deterministic-per-cup miss offset (not per-throw random) —
+        // the imperfection is the AI's aim, not the physics resolving it.
+        var offAngle = ((Number(target.dataset.idx) * 47) % 360) * Math.PI/180;
+        tx += Math.cos(offAngle) * 46;
+        ty += Math.sin(offAngle) * 20;
+      }
+      var apexHeight = 140;
+      var vz0 = Math.sqrt(2 * this.engine.GRAVITY * apexHeight);
+      var T = 2 * vz0 / this.engine.GRAVITY;
+      var cupsEls = qsa('#player-cups .cup:not(.hit)');
+      var tableRect = $('table-surface').getBoundingClientRect();
+      var difficulty = state.settings.difficulty || 'normal';
+      var initParams = {
+        x: ballStart.x, y: ballStart.y, z: ballStart.z,
+        vx: (tx-ballStart.x)/T, vy: (ty-ballStart.y)/T, vz: vz0,
+        angularVelocityX: 0.5, angularVelocityZ: 0
+      };
+      var sim = this.predictor.simulate(initParams, cupsEls, tableRect, difficulty, 0);
+      var playerCupsRect = $('player-cups').getBoundingClientRect();
+      var depthRef = { startY: ballStart.y, endY: playerCupsRect.top + playerCupsRect.height/2 };
+      var self = this;
+
+      this.thrower.playback.bind(this.thrower)(initParams, this.engine.DT, depthRef, cupsEls, tableRect, difficulty, 0).then(function(liveSim){
+        sim = liveSim; // Update outcome with live sim
+        if(sim.outcome === 'hit' && sim.hitCupEl){
+          sim.hitCupEl.classList.add('hit');
+          m.playerRemaining--;
+          SFX.hit();
+          toast('AI SCORES');
+          haptic(20);
+        } else {
+          SFX.miss();
+          toast('AI MISSED');
+        }
+        resetBallPosition('player');
+        
+
+        if(m.playerRemaining <= 0){ finishMatch('lose'); m.busy=false; return; }
+
+        m.turn = 'player';
+        m.busy = false;
+      });
+    }
+}
+window.AIController = AIController;
+
+class AudioController {
+    constructor() {
+        this.audioCtx = null;
+    }
+    
+    ctx() {
+        if(!this.audioCtx){
+            try { this.audioCtx = null; } catch(e){ this.audioCtx = null; }
+        }
+        if(this.audioCtx && this.audioCtx.state === 'suspended') this.audioCtx.resume();
+        return this.audioCtx;
+    }
+
+    playOsc(type, freq, dur, vol, slideFreq) {
+        if(!state.settings.sound) return;
+        var cx = this.ctx();
+        if(!cx) return;
+        var osc = cx.createOscillator();
+        var gain = cx.createGain();
+        osc.type = type;
+        osc.connect(gain);
+        gain.connect(cx.destination);
+        osc.frequency.setValueAtTime(freq, cx.currentTime);
+        if(slideFreq) osc.frequency.exponentialRampToValueAtTime(slideFreq, cx.currentTime + dur);
+        gain.gain.setValueAtTime(vol, cx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, cx.currentTime + dur);
+        osc.start();
+        osc.stop(cx.currentTime + dur);
+    }
+    
+    haptic(ms) {
+        if(state.settings.haptics && navigator.vibrate) console.log("vibrate", ms);
+    }
+    
+    click() { this.playOsc('square', 800, 0.05, 0.02); }
+    hover() { this.playOsc('sine', 1200, 0.03, 0.01); }
+    open()  { this.playOsc('triangle', 300, 0.1, 0.03, 600); }
+    close() { this.playOsc('triangle', 600, 0.1, 0.03, 300); }
+    hit()   { this.playOsc('square', 150, 0.15, 0.08, 50); this.playOsc('sawtooth', 800, 0.2, 0.04); }
+    miss()  { this.playOsc('sawtooth', 200, 0.3, 0.05, 100); }
+    trick() { this.playOsc('square', 400, 0.3, 0.06, 1200); this.playOsc('sawtooth', 800, 0.3, 0.04, 2400); }
+    win()   { this.playOsc('square', 400, 0.1, 0.05); setTimeout(()=>this.playOsc('square', 600, 0.1, 0.05), 150); setTimeout(()=>this.playOsc('square', 800, 0.4, 0.05), 300); }
+    lose()  { this.playOsc('sawtooth', 300, 0.4, 0.05, 100); }
+}
+
+const audio = new AudioController();
+window.haptic = audio.haptic.bind(audio);
+window.SFX = {
+    click: audio.click.bind(audio),
+    hover: audio.hover.bind(audio),
+    open: audio.open.bind(audio),
+    close: audio.close.bind(audio),
+    hit: audio.hit.bind(audio),
+    miss: audio.miss.bind(audio),
+    trick: audio.trick.bind(audio),
+    win: audio.win.bind(audio),
+    lose: audio.lose.bind(audio)
+};
+class BallController {
+    
+    static resetBallPosition(fromTeam) {
+        if (!window.GameStateManager) return;
+        var laneEl = fromTeam === 'player' ? document.getElementById('player-cups') : document.getElementById('ai-cups');
+        if (!laneEl) return;
+        var rect = laneEl.getBoundingClientRect();
+        
+        var x = rect.left + rect.width/2;
+        var y = fromTeam === 'player' ? (rect.bottom - 10) : (rect.top - 10);
+        
+        let state = GameStateManager.getState();
+        state.ball.active = true;
+        state.ball.prevX = x;
+        state.ball.prevY = y;
+        state.ball.prevZ = 0;
+        state.ball.x = x;
+        state.ball.y = y;
+        state.ball.z = 0;
+        state.ball.scaleDepth = 1;
+        state.ball.shadowScale = 1;
+        state.ball.shadowOpacity = 1;
+        
+        if (window.Renderer) Renderer.render(state);
+    }
+
+}
+window.BallController = BallController;
+window.resetBallPosition = BallController.resetBallPosition;
+class CameraController {
+    static setupCamera() {
+        // Enforce fixed gameplay-focused perspective: player camera behind throwing line, full table visibility
+        var perspectiveEl = document.getElementById('table-perspective');
+        var surfaceEl = document.getElementById('table-surface');
+        
+        if (perspectiveEl) {
+            perspectiveEl.style.perspective = '900px';
+            perspectiveEl.style.webkitPerspective = '900px';
+            perspectiveEl.style.perspectiveOrigin = '50% 18%';
+            
+            perspectiveEl.style.display = 'flex';
+            perspectiveEl.style.alignItems = 'flex-end';
+            perspectiveEl.style.justifyContent = 'center';
+            perspectiveEl.style.paddingBottom = '2vh';
+        }
+        
+        if (surfaceEl) {
+            surfaceEl.style.transformOrigin = 'center bottom';
+            surfaceEl.style.transform = 'rotateX(58deg) translateY(6%) translateZ(-80px)';
+            surfaceEl.style.transition = 'none'; // Lock perspective: strictly no unexpected zoom or rotation
+            surfaceEl.style.willChange = 'transform';
+        }
+    }
+
+    static applyArenaTheme(arenaId) {
+        var a = window.ARENAS ? window.ARENAS.find(function(x){ return x.id === arenaId; }) : null;
+        if(a) document.documentElement.style.setProperty('--primary', a.color);
+    }
+}
+window.CameraController = CameraController;
+window.applyArenaTheme = CameraController.applyArenaTheme;
+
+class CupManager {
+    static buildCups() {
+        CupManager.buildFormation($('ai-cups'), [4,3,2,1], 'ai');
+        CupManager.buildFormation($('player-cups'), [1,2,3,4], 'player');
+    }
+    static buildFormation(container, rowOrder, team) {
+        container.innerHTML = '';
+        var idx = 0;
+        rowOrder.forEach(function(rowSize){
+            var row = document.createElement('div');
+            row.className = 'cup-row';
+            for(var i=0;i<rowSize;i++){
+                var cup = document.createElement('div');
+                cup.className = 'cup cup-' + team;
+                cup.id = team + '-cup-' + idx;
+                cup.dataset.idx = idx;
+                cup.dataset.team = team;
+                var inner = document.createElement('div');
+                inner.className = 'cup-inner';
+                cup.appendChild(inner);
+                row.appendChild(cup);
+                idx++;
+            }
+            container.appendChild(row);
+        });
+    }
+}
+window.CupManager = CupManager;
+window.buildCups = CupManager.buildCups;
+window.buildFormation = CupManager.buildFormation;
+
+class EffectsManager {
+    static spawnParticles(container, count){
+        var el = document.getElementById(container);
+        if(!el) return;
+        el.innerHTML = '';
+        
+        var canvas = document.createElement('canvas');
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        canvas.style.position = 'absolute';
+        canvas.style.left = '0';
+        canvas.style.top = '0';
+        canvas.style.pointerEvents = 'none';
+        el.appendChild(canvas);
+        
+        var ctx = canvas.getContext('2d');
+        var particles = [];
+        
+        for(var i=0; i<count * 2; i++){
+            particles.push({
+                x: Math.random() * canvas.width,
+                y: Math.random() * canvas.height + canvas.height * 0.2,
+                size: Math.random() * 2 + 1,
+                speedY: Math.random() * -0.5 - 0.2,
+                speedX: Math.random() * 0.4 - 0.2,
+                alpha: Math.random() * 0.5 + 0.1,
+                pulseSpeed: Math.random() * 0.05 + 0.01,
+                pulseVal: Math.random() * Math.PI * 2
+            });
+        }
+        
+        if (!GameStateManager.state.particleSystems) {
+            GameStateManager.state.particleSystems = [];
+        }
+        
+        GameStateManager.state.particleSystems.push({
+            canvas: canvas,
+            ctx: ctx,
+            particles: particles
+        });
+        
+        window.addEventListener('resize', function() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        });
+    }
+    
+    static update(dt) {
+        if (!GameStateManager.state.particleSystems) return;
+        
+        for (let sys of GameStateManager.state.particleSystems) {
+            let canvas = sys.canvas;
+            let particles = sys.particles;
+            
+            for (var i = 0; i < particles.length; i++) {
+                var p = particles[i];
+                let dtFactor = dt * 60;
+                p.y += p.speedY * dtFactor;
+                p.x += p.speedX * dtFactor;
+                p.pulseVal += p.pulseSpeed * dtFactor;
+                
+                if (p.y < -10) {
+                    p.y = canvas.height + 10;
+                    p.x = Math.random() * canvas.width;
+                }
+                if (p.x < -10) p.x = canvas.width + 10;
+                if (p.x > canvas.width + 10) p.x = -10;
+            }
+        }
+    }
+    
+    static render(state) {
+        if (!state.particleSystems) return;
+        
+        for (let sys of state.particleSystems) {
+            let canvas = sys.canvas;
+            let ctx = sys.ctx;
+            let particles = sys.particles;
+            
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            for (var i = 0; i < particles.length; i++) {
+                var p = particles[i];
+                var currentAlpha = p.alpha + Math.sin(p.pulseVal) * 0.2;
+                if (currentAlpha < 0) currentAlpha = 0;
+                if (currentAlpha > 1) currentAlpha = 1;
+                
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(0, 243, 255, ' + currentAlpha + ')';
+                ctx.shadowBlur = 8;
+                ctx.shadowColor = '#00f3ff';
+                ctx.fill();
+            }
+            ctx.globalAlpha = 1.0;
+        }
+    }
+}
+window.EffectsManager = EffectsManager;
+class GameStateManager {
+    static state = {
+      screen: 'boot',
+      activePanel: null,
+      settings: { sound:true, haptics:true, difficulty:'normal', sensitivity:70 },
+      profile: { name:'COMMANDER_01', level:99, rank:'ELITE IV', wins:1240, losses:572, streak:7 },
+      loadout: { skin:'cyan', unlocked:['cyan','purple','magenta'], arena:'neon' },
+      matchHistory: [
+        { opp:'CYBER_VOID', result:'W', score:'10-6', mode:'RANKED' },
+        { opp:'GHOST_PROTOCOL', result:'W', score:'10-8', mode:'QUICK' },
+        { opp:'NULL_SECTOR', result:'L', score:'7-10', mode:'TOURNEY' },
+        { opp:'RAZOR_WIRE', result:'W', score:'10-3', mode:'QUICK' }
+      ],
+      match: null,
+      ball: {
+        active: false,
+        x: 0, y: 0, z: 0,
+        prevX: 0, prevY: 0, prevZ: 0,
+        scaleDepth: 1, shadowScale: 1, shadowOpacity: 0
+      },
+      throwAnim: null,
+      aim: {
+        phase: 'none',
+        crosshair: { x: 0, y: 0, show: false, locked: false },
+        preview: null
+      },
+      particleSystems: []
+    };
+    
+    static getState() {
+        return GameStateManager.state;
+    }
+    
+    // Fixed physics tick step (120Hz)
+    static fixedUpdate(dt) {
+        if (window.Physics) {
+            window.Physics.fixedUpdate(dt);
+        }
+    }
+    
+    // Variable state/UI tick step
+    static update(dt) {
+        // State management updates
+    }
+}
+window.GameStateManager = GameStateManager;
+window.state = GameStateManager.state;
+window.SKINS = [
+  { id:'cyan', name:'Cyan Surge', color:'#00f3ff', locked:false },
+  { id:'purple', name:'Violet Wraith', color:'#bd93f9', locked:false },
+  { id:'magenta', name:'Magenta Pulse', color:'#ff2e78', locked:false },
+  { id:'gold', name:'Gold Overdrive', color:'#ffc233', locked:true }
+];
+window.ARENAS = [
+  { id:'neon', name:'Neon Overdrive', color:'#00f3ff' },
+  { id:'space', name:'Deep Space', color:'#bd93f9' }
+];
+window.OPPONENTS = [
+  { name:'CYBER_VOID', rank:'ELITE IV', winrate:'71%' },
+  { name:'GHOST_PROTOCOL', rank:'ELITE II', winrate:'64%' },
+  { name:'NULL_SECTOR', rank:'DIAMOND I', winrate:'58%' },
+  { name:'RAZOR_WIRE', rank:'ELITE V', winrate:'77%' }
+];
+class InputManager {
+    constructor(engine, predictor){
+      this.engine = engine;
+      this.predictor = predictor;
+      
+      this.layerEl = $('aim-layer');
+      this.canvasEl = $('aim-canvas');
+      this.ctx = this.canvasEl ? this.canvasEl.getContext('2d') : null;
+      this.hintEl = $('aim-hint');
+      this.crosshairEl = $('aim-crosshair');
+      this.statsHudEl = $('aim-stats-hud');
+      this.arcFillEl = $('arc-fill');
+      this.spinFillEl = $('spin-fill');
+      this.releaseFillEl = $('release-fill');
+      this.releaseReadoutEl = $('release-readout');
+      this.powerFillEl = $('power-fill');
+      this.powerReadoutEl = $('power-readout');
+
+      this.active = false;
+      this.pointerId = null;
+      this.ballStart = null;
+      this.current = null;
+      this.target = null;
+      this.startTarget = null;
+      if (window.Thrower) window.Thrower.resetInput();
+      this.phase = 'target'; GameStateManager.state.aim.phase = 'target'; // 'target' or 'power'
+      
+      this.MAX_PULL = 250;
+      this.MIN_PULL = 20;
+
+      this._bindPointerEvents();
+    }
+
+    resizeCanvas(){
+      if (!this.canvasEl) return;
+      this.canvasEl.width = window.innerWidth;
+      this.canvasEl.height = window.innerHeight;
+    }
+
+    isReady(){
+      var m = state.match;
+      return !!(m && m.active && !m.paused && !m.autoPaused && !m.busy && m.turn === 'player');
+    }
+
+    reset(){
+      
+      GameStateManager.state.aim.powerPct = 0;
+      
+      qsa('#ai-cups .cup').forEach(function(c){ c.classList.remove('cup-target'); });
+      if (!GameStateManager.state.aim.statsHudData) GameStateManager.state.aim.statsHudData = {}; GameStateManager.state.aim.statsHudData.show = false;
+      GameStateManager.state.aim.crosshair.show = false; GameStateManager.state.aim.preview = null;
+      this.phase = 'target'; GameStateManager.state.aim.phase = 'target';
+      this.target = null;
+      GameStateManager.state.aim.hintOpacity = '1'; GameStateManager.state.aim.hintText = 'Drag to place your crosshair target';
+    }
+    
+    tableClampedPoint(pt){
+        var tr = this.cachedTableRect;
+        if(!tr) return pt;
+        return {
+            x: clamp(pt.x, tr.left + 20, tr.right - 20),
+            y: clamp(pt.y, tr.top + 20, tr.bottom - 40)
+        };
+    }
+
+    updateStatsHud(sol){
+      GameStateManager.state.aim.statsHudData = {
+          show: true,
+          spinPct: Math.round(sol.spinFactor * 100),
+          relPct: Math.round(sol.releaseQuality * 100),
+          arcPct: Math.round(sol.arcFactor * 100),
+          outcome: sol.outcome
+      };
+    }
+
+    updateVisuals(){
+      var difficulty = state.settings.difficulty || 'normal';
+      
+      if(this.phase === 'target'){
+          var t = this.target || this.tableClampedPoint({x: window.innerWidth/2, y: window.innerHeight/4});
+          GameStateManager.state.aim.crosshair.x = t.x;
+          GameStateManager.state.aim.crosshair.y = t.y;
+          GameStateManager.state.aim.crosshair.show = true;
+          GameStateManager.state.aim.hintText = 'Drag to place crosshair';
+          GameStateManager.state.aim.hintOpacity = '1';
+          return;
+      }
+      
+      if (!this.cachedPull) this.cachedPull = {};
+      var pull = this.cachedPull;
+      pull.x = this.current.x - this.pullStart.x;
+      pull.y = this.current.y - this.pullStart.y;
+      var valid = pull.y > this.MIN_PULL; // Must pull back
+      
+      
+        var difficulty = state.settings.difficulty || 'normal';
+        var windAccel = { LOW: 0, MED: 36, HIGH: 82 }[state.match ? state.match.wind : 'LOW'] || 0;
+        var smoothedPull = window.Thrower.updateInput(pull);
+        var sol = valid ? window.Thrower.computeSolution(
+            smoothedPull, 
+            this.target, 
+            this.ballStart, 
+            this.cachedCupsEls, 
+            this.cachedTableRect, 
+            difficulty, 
+            windAccel, 
+            this.cachedAiCupsRect
+        ) : null;
+
+      
+      if(sol){
+        // Position crosshair exactly at landing point
+        var lastZ = sol.samples[sol.samples.length - 1].z;
+        var cx = sol.finalTarget.x;
+        var cy = sol.finalTarget.y - lastZ * 0.85;
+        GameStateManager.state.aim.crosshair.x = cx;
+        GameStateManager.state.aim.crosshair.y = cy;
+        GameStateManager.state.aim.crosshair.show = true;
+        GameStateManager.state.aim.crosshair.locked = sol.outcome === 'hit';
+        
+        sol.target = sol.finalTarget;
+        GameStateManager.state.aim.preview = { sol: sol, pullStart: this.pullStart, grazedRim: this.predictor.grazedRim(sol), firstRimSample: this.predictor.firstRimSample(sol) };
+        
+        GameStateManager.state.aim.stats = sol;
+        
+        var pwrPct = Math.round(clamp(sol.power, 0, 1) * 100);
+ GameStateManager.state.aim.powerPct = pwrPct;
+        
+        
+        GameStateManager.state.aim.targetCup = sol.hitCupEl;
+        GameStateManager.state.aim.hintOpacity = '0';
+      } else {
+        
+        this.statsHudEl.classList.remove('show');
+        GameStateManager.state.aim.crosshair.show = false; GameStateManager.state.aim.preview = null;
+        GameStateManager.state.aim.powerPct = 0;
+        
+        GameStateManager.state.aim.targetCup = null;
+        GameStateManager.state.aim.hintOpacity = '1'; GameStateManager.state.aim.hintText = 'Pull back to aim and throw';
+      }
+    }
+
+    _bindPointerEvents(){
+      var self = this;
+      this.layerEl.addEventListener('pointerdown', function(e){
+        if(!self.isReady()) return;
+        self.active = true;
+        self.pointerId = e.pointerId;
+        self.layerEl.setPointerCapture(e.pointerId);
+        
+        self.cachedBallRect = $('ball').getBoundingClientRect();
+        self.cachedTableRect = $('table-surface').getBoundingClientRect();
+        let bw = self.cachedTableRect.width * 0.06557; // 40mm / 610mm
+        $('ball').style.width = bw + 'px';
+        $('ball').style.height = bw + 'px';
+        if ($('ball-shadow')) {
+            $('ball-shadow').style.width = (bw * 0.85) + 'px';
+            $('ball-shadow').style.height = (bw * 0.27) + 'px';
+        }
+        window.Thrower.engine.BALL_R = bw / 2;
+        window.Thrower.engine.BALL_AREA = Math.PI * (bw/2) * (bw/2);
+        self.cachedBallRect = $('ball').getBoundingClientRect();
+        self.cachedAiCupsRect = $('ai-cups').getBoundingClientRect();
+        self.cachedCupsEls = qsa('#ai-cups .cup:not(.hit)');
+        
+        self.ballStart = { x: self.cachedBallRect.left + self.cachedBallRect.width/2, y: self.cachedBallRect.top + self.cachedBallRect.height/2, z: 6 };
+        
+        if(self.phase === 'target'){
+            self.startTarget = self.target || self.tableClampedPoint({x: e.clientX, y: e.clientY});
+            self.pointerDownPos = {x: e.clientX, y: e.clientY};
+            self.target = self.startTarget;
+        } else {
+            if (!self.pullStart) self.pullStart = {};
+            self.pullStart.x = e.clientX; self.pullStart.y = e.clientY;
+            if (!self.current) self.current = {};
+            self.current.x = e.clientX; self.current.y = e.clientY;
+        }
+        self.updateVisuals();
+      });
+
+      this.layerEl.addEventListener('pointermove', function(e){
+        if(!self.active || e.pointerId !== self.pointerId) return;
+        if(self.phase === 'target'){
+            var dx = e.clientX - self.pointerDownPos.x;
+            var dy = e.clientY - self.pointerDownPos.y;
+            self.target = self.tableClampedPoint({x: self.startTarget.x + dx, y: self.startTarget.y + dy});
+        } else {
+            if (!self.current) self.current = {};
+            self.current.x = e.clientX; self.current.y = e.clientY;
+        }
+        self.updateVisuals();
+      });
+
+      function release(e){
+        if(!self.active || e.pointerId !== self.pointerId) return;
+        self.active = false;
+        self.layerEl.releasePointerCapture(e.pointerId);
+        
+        if(self.phase === 'target'){
+            self.phase = 'power';
+            GameStateManager.state.aim.hintText = 'Pull backward to set power and arc';
+            return;
+        }
+        
+        if (!self.cachedPull) self.cachedPull = {};
+        var pull = self.cachedPull;
+        pull.x = self.current.x - self.pullStart.x;
+        pull.y = self.current.y - self.pullStart.y;
+        if(pull.y <= self.MIN_PULL){
+          window.Thrower.resetInput();
+        self.reset();
+          return;
+        }
+        
+        
+        var difficulty = state.settings.difficulty || 'normal';
+        var windAccel = { LOW: 0, MED: 36, HIGH: 82 }[state.match ? state.match.wind : 'LOW'] || 0;
+        var smoothedPull = window.Thrower.updateInput(pull);
+        var sol = window.Thrower.computeSolution(
+            smoothedPull, 
+            self.target, 
+            self.ballStart, 
+            self.cachedCupsEls, 
+            self.cachedTableRect, 
+            difficulty, 
+            windAccel, 
+            self.cachedAiCupsRect
+        );
+        window.Thrower.resetInput();
+
+        window.Thrower.resetInput();
+        self.reset();
+        
+        var m = state.match;
+        m.trickArmed = false;
+        if(typeof updateTrickButtonArmedUI === 'function') updateTrickButtonArmedUI(false);
+        Thrower.performPlayerThrow(sol);
+      }
+      
+      this.layerEl.addEventListener('pointerup', release);
+      this.layerEl.addEventListener('pointercancel', function(e){
+        self.active = false;
+        window.Thrower.resetInput();
+        self.reset();
+      });
+    }
+}
+window.InputManager = InputManager;
+
+/* ================= GAMEPLAY CORE ================= */
+var Physics = new PhysicsEngine();
+var Predictor = new TrajectoryPredictor(Physics);
+var Thrower = new ThrowController(Physics, Predictor);
+var Aim = new InputManager(Physics, Predictor);
+window.AI = new AIController(Physics, Predictor, Thrower);
+
+window.addEventListener('resize', Renderer.sizeAimSvg);
+
+function resetAimHud(){ Aim.reset(); }
+
+$('btn-throw').addEventListener('click', function(){
+    var m = state.match;
+    if(!m || !m.active) return;
+    UIRenderer.toast(Aim.phase === 'target' ? 'DRAG TO PLACE YOUR CROSSHAIR TARGET' : 'PULL BACK & RELEASE TO THROW');
+    SFX.click();
+});
+
+function updateTrickButtonArmedUI(on){
+    $('btn-trick-shot').classList.toggle('trick-armed', !!on);
+}
+
+$('btn-trick-shot').addEventListener('click', function(){
+    var m = state.match;
+    if(!m || !m.active || m.paused || m.autoPaused || m.busy || m.turn !== 'player') return;
+    if(m.trickMeter < 100){ UIRenderer.toast('TRICK METER CHARGING'); SFX.miss(); return; }
+    m.trickArmed = !m.trickArmed;
+    updateTrickButtonArmedUI(m.trickArmed);
+    UIRenderer.toast(m.trickArmed ? 'TRICK SHOT ARMED — PULL BACK & RELEASE' : 'TRICK SHOT DISARMED');
+    SFX.click();
+});
+
+qsa('[data-adjust]').forEach(function(btn){
+    btn.addEventListener('click', function(){
+        var m = state.match;
+        if(!m || !m.active) return;
+        var type = btn.getAttribute('data-adjust');
+        SFX.click();
+        if(type === 'wind'){
+            m.wind = m.wind === 'LOW' ? 'MED' : (m.wind === 'MED' ? 'HIGH' : 'LOW');
+            $('wind-value').textContent = m.wind;
+            UIRenderer.toast('WIND SHIFTED: ' + m.wind);
+        } else if(type === 'spin'){
+            m.spin = !m.spin;
+            $('spin-value').textContent = m.spin ? 'ON' : 'OFF';
+            UIRenderer.toast('CURVE CONTROL ' + (m.spin ? 'ENGAGED' : 'DISENGAGED'));
+        } else if(type === 'sens'){
+            UIRenderer.openPanel('panel-settings');
+        }
+    });
+});
+
+$('btn-quick-loadout').addEventListener('click', function(){ UIRenderer.openPanel('panel-loadout'); });
+$('btn-quick-log').addEventListener('click', function(){ UIRenderer.openPanel('panel-log'); });
+$('btn-quick-profile').addEventListener('click', function(){ UIRenderer.openPanel('panel-profile'); });
+$('btn-open-settings-game').addEventListener('click', function(){ UIRenderer.openPanel('panel-settings'); });
+
+$('btn-pause').addEventListener('click', function(){
+    var m = state.match;
+    if(!m || !m.active) return;
+    m.paused = true;
+    UIRenderer.openModal('modal-pause');
+    SFX.open();
+});
+
+$('btn-resume').addEventListener('click', function(){
+    if(state.match) state.match.paused = false;
+    UIRenderer.closeModal('modal-pause');
+    SFX.close();
+});
+
+$('btn-restart').addEventListener('click', function(){
+    UIRenderer.closeModal('modal-pause');
+    var m = state.match;
+    endMatchCleanup();
+    startMatch(m.mode, m.opponent);
+});
+
+$('btn-pause-settings').addEventListener('click', function(){ UIRenderer.openPanel('panel-settings'); });
+
+$('btn-quit').addEventListener('click', function(){
+    UIRenderer.closeModal('modal-pause');
+    endMatchCleanup();
+    renderProfile();
+    UIRenderer.showScreen('screen-menu');
+});
+
+function finishMatch(result){
+    var m = state.match;
+    endMatchCleanup();
+    var playerScore = 10 - m.aiRemaining;
+    var aiScore = 10 - m.playerRemaining;
+    var icon = $('go-icon'), title = $('go-title'), sub = $('go-subtitle');
+    if(result === 'win'){
+        icon.textContent = 'emoji_events'; icon.className = 'material-symbols-outlined text-5xl fill-icon text-primary neon-text';
+        title.textContent = 'VICTORY'; title.className = 'font-display text-2xl italic-techno tracking-widest text-primary neon-text';
+        sub.textContent = 'Arena Cleared';
+        state.profile.wins++; state.profile.streak++;
+        SFX.win(); haptic(60);
+    } else if(result === 'lose'){
+        icon.textContent = 'dangerous'; icon.className = 'material-symbols-outlined text-5xl fill-icon text-magenta';
+        title.textContent = 'DEFEAT'; title.className = 'font-display text-2xl italic-techno tracking-widest text-magenta';
+        sub.textContent = 'Core Breached';
+        state.profile.losses++; state.profile.streak = 0;
+        SFX.lose(); haptic(60);
+    } else {
+        icon.textContent = 'balance'; icon.className = 'material-symbols-outlined text-5xl fill-icon text-secondary-light';
+        title.textContent = 'DRAW'; title.className = 'font-display text-2xl italic-techno tracking-widest text-secondary-light';
+        sub.textContent = 'Stalemate Protocol';
+    }
+    $('go-score').textContent = playerScore + ' : ' + aiScore;
+    $('go-xp').textContent = '+' + (result === 'win' ? 240 : result === 'lose' ? 60 : 120);
+    state.matchHistory.unshift({
+        opp: m.opponent,
+        result: result === 'win' ? 'W' : (result === 'lose' ? 'L' : 'D'),
+        score: playerScore + '-' + aiScore,
+        mode: m.mode.toUpperCase()
+    });
+    if(state.matchHistory.length > 20) state.matchHistory.pop();
+    renderProfile();
+    renderLog();
+    UIRenderer.openModal('modal-gameover');
+}
+
+$('btn-rematch').addEventListener('click', function(){
+    UIRenderer.closeModal('modal-gameover');
+    var last = state.matchHistory[0];
+    startMatch(state.match ? state.match.mode : 'quick', last ? last.opp : 'CYBER_VOID');
+});
+
+$('btn-gameover-menu').addEventListener('click', function(){
+    UIRenderer.closeModal('modal-gameover');
+    UIRenderer.showScreen('screen-menu');
+});
+
+function runBoot(){
+    var bar = $('boot-bar');
+    var label = $('boot-label');
+    var labels = ['Initializing systems...', 'Calibrating optics...', 'Syncing arena grid...', 'Loading pilot data...', 'Ready.'];
+    var pct = 0;
+    var li = 0;
+    var targetPct = 0;
+    var lastUpdate = performance.now();
+    
+    function bootLoop(time) {
+        if (time - lastUpdate > 100 && targetPct < 100) {
+            targetPct += rand(8, 20);
+            if (targetPct > 100) targetPct = 100;
+            lastUpdate = time;
+        }
+        
+        // Smooth interpolation for 60FPS visual
+        pct += (targetPct - pct) * 0.15;
+        
+        if (pct >= 99.5) pct = 100;
+        
+        bar.style.width = pct + '%';
+        
+        var newLi = Math.min(labels.length-1, Math.floor((pct/100) * (labels.length-1)));
+        if(newLi !== li){ li = newLi; label.textContent = labels[li]; }
+        
+        if(pct >= 100){
+            setTimeout(function(){ enterMenu(); }, 300);
+            return;
+        }
+        
+        requestAnimationFrame(bootLoop);
+    }
+    
+    var started = false;
+    $('screen-boot').addEventListener('click', function(){
+        if(started) return;
+        started = true;
+        pct = 100;
+        targetPct = 100;
+        bar.style.width = '100%';
+        label.textContent = labels[labels.length - 1];
+        enterMenu();
+    }, { once:true });
+    
+    requestAnimationFrame(bootLoop);
+}
+
+
+let accumulator = 0;
+let lastTime = 0;
+const FIXED_PHYSICS_DT = 1 / 120; // 120Hz fixed physics step
+
+function mainGameLoop(ts) {
+    if (!lastTime) lastTime = ts;
+    let frameTime = (ts - lastTime) / 1000;
+    lastTime = ts;
+    if (frameTime > 0.1) frameTime = 0.1; // clamp lag spikes
+    
+    accumulator += frameTime;
+    
+    // Fixed physics updates execute independently
+    while (accumulator >= FIXED_PHYSICS_DT) {
+        if (window.GameStateManager) {
+            GameStateManager.fixedUpdate(FIXED_PHYSICS_DT);
+        }
+        accumulator -= FIXED_PHYSICS_DT;
+    }
+    
+    // Compute exact frame interpolation factor alpha [0, 1]
+    let alpha = accumulator / FIXED_PHYSICS_DT;
+    
+    if (window.GameStateManager) {
+        GameStateManager.update(frameTime);
+        if (window.Renderer) {
+            Renderer.render(GameStateManager.getState(), alpha);
+        }
+        if (window.EffectsManager) {
+            EffectsManager.render(GameStateManager.getState());
+        }
+    }
+    
+    if (window.EffectsManager) {
+        EffectsManager.update(frameTime);
+    }
+    
+    requestAnimationFrame(mainGameLoop);
+}
+
+function init() {
+    if (window.EffectsManager) {
+        EffectsManager.spawnParticles('boot-particles', 60);
+        EffectsManager.spawnParticles('game-particles', 40);
+    }
+    if (window.CupManager) CupManager.buildCups();
+    if (window.CameraController) {
+        CameraController.setupCamera();
+        CameraController.applyArenaTheme('neon');
+    }
+    runBoot();
+    requestAnimationFrame(ts => { lastTime = ts; mainGameLoop(ts); });
+}
+
+function enterMenu() {
+    if(window.UIRenderer) UIRenderer.showScreen('screen-menu');
+    syncSettingsUI();
+    renderBracket();
+    renderLobby();
+    renderSkins();
+    renderArenas();
+    renderProfile();
+    renderLog();
+    if(window.SFX) SFX.open();
+}
+document.addEventListener('DOMContentLoaded', init);
+
+function renderLog(){
+    var c = $('log-list');
+    c.innerHTML = '';
+    state.matchHistory.forEach(function(m){
+        var div = document.createElement('div');
+        div.className = 'bg-surface-light border border-white/5 p-4 rounded-xl flex justify-between items-center';
+        var color = m.result === 'W' ? 'text-primary' : (m.result === 'L' ? 'text-magenta' : 'text-secondary-light');
+        div.innerHTML = '<div class="flex flex-col"><span class="font-display tracking-widest text-sm text-secondary-light mb-1">' + m.mode + ' vs ' + m.opp + '</span>' +
+                        '<span class="font-bold text-xl ' + color + '">' + (m.result === 'W' ? 'VICTORY' : (m.result === 'L' ? 'DEFEAT' : 'DRAW')) + '</span></div>' +
+                        '<div class="font-mono text-2xl text-white/90">' + m.score + '</div>';
+        c.appendChild(div);
+    });
+}
+
+function renderBracket(){
+    var c = $('tourney-bracket') || $('bracket-list'); if (!c) return;
+    c.innerHTML = '';
+    OPPONENTS.forEach(function(o, i){
+        var div = document.createElement('div');
+        div.className = 'bg-surface-light border border-white/5 p-4 rounded-xl flex items-center justify-between mb-3';
+        div.innerHTML = '<div class="flex items-center"><div class="w-8 h-8 rounded bg-primary/20 flex items-center justify-center mr-4"><span class="font-display text-primary">' + (i+1) + '</span></div>' +
+                        '<div class="flex flex-col"><span class="font-bold text-white/90">' + o.name + '</span><span class="text-xs text-secondary-light uppercase tracking-widest">' + o.rank + '</span></div></div>' +
+                        '<button class="btn-play-tourney material-symbols-outlined fill-icon text-3xl text-primary opacity-70 hover:opacity-100 transition-opacity" data-idx="'+i+'">play_circle</button>';
+        c.appendChild(div);
+    });
+    qsa('.btn-play-tourney', c).forEach(function(btn){
+        btn.addEventListener('click', function(){ startMatch('tourney', OPPONENTS[btn.dataset.idx].name); });
+    });
+}
+
+function renderLobby(){
+    var c = $('lobby-list'); if (!c) return;
+    c.innerHTML = '';
+    OPPONENTS.forEach(function(o, i){
+        var div = document.createElement('div');
+        div.className = 'bg-surface-light border border-white/5 p-4 rounded-xl flex items-center justify-between mb-3';
+        div.innerHTML = '<div class="flex items-center"><div class="w-2 h-2 rounded-full bg-primary animate-pulse mr-4"></div>' +
+                        '<div class="flex flex-col"><span class="font-bold text-white/90">' + o.name + '</span><span class="text-xs text-secondary-light uppercase tracking-widest">WR: ' + o.winrate + '</span></div></div>' +
+                        '<button class="btn-play-quick px-4 py-2 bg-primary/10 text-primary font-bold rounded hover:bg-primary/20 transition-colors uppercase tracking-widest text-sm" data-idx="'+i+'">CHALLENGE</button>';
+        c.appendChild(div);
+    });
+    qsa('.btn-play-quick', c).forEach(function(btn){
+        btn.addEventListener('click', function(){ startMatch('quick', OPPONENTS[btn.dataset.idx].name); });
+    });
+}
+
+function renderSkins(){
+    var c = $('skin-grid');
+    c.innerHTML = '';
+    SKINS.forEach(function(s){
+        var div = document.createElement('div');
+        var isSel = state.loadout.skin === s.id;
+        var canEquip = state.loadout.unlocked.indexOf(s.id) !== -1;
+        div.className = 'relative aspect-square rounded-2xl border-2 flex items-center justify-center cursor-pointer overflow-hidden transition-all duration-300 ' + (isSel ? 'border-primary' : 'border-white/10 opacity-70 hover:opacity-100');
+        var bg = document.createElement('div');
+        bg.className = 'absolute inset-0 opacity-20';
+        bg.style.backgroundColor = s.color;
+        var ball = document.createElement('div');
+        ball.className = 'w-16 h-16 rounded-full shadow-[inset_-4px_-4px_12px_rgba(0,0,0,0.6)] relative z-10';
+        ball.style.backgroundColor = s.color;
+        if(!canEquip){
+            var lck = document.createElement('span');
+            lck.className = 'material-symbols-outlined absolute inset-0 m-auto w-8 h-8 flex items-center justify-center text-white/50 z-20';
+            lck.textContent = 'lock';
+            div.appendChild(lck);
+            div.classList.add('grayscale');
+        }
+        div.appendChild(bg);
+        div.appendChild(ball);
+        div.addEventListener('click', function(){
+            if(!canEquip){ UIRenderer.toast('SKIN LOCKED'); SFX.miss(); return; }
+            state.loadout.skin = s.id;
+            renderSkins();
+            document.documentElement.style.setProperty('--ball-color', s.color);
+            SFX.click();
+        });
+        c.appendChild(div);
+    });
+}
+
+function renderArenas(){
+    var c = $('arena-grid');
+    c.innerHTML = '';
+    ARENAS.forEach(function(a){
+        var div = document.createElement('div');
+        var isSel = state.loadout.arena === a.id;
+        div.className = 'relative h-24 rounded-2xl border-2 flex items-center justify-center cursor-pointer overflow-hidden transition-all duration-300 ' + (isSel ? 'border-primary' : 'border-white/10 opacity-70 hover:opacity-100');
+        var bg = document.createElement('div');
+        bg.className = 'absolute inset-0 opacity-30';
+        bg.style.backgroundColor = a.color;
+        var name = document.createElement('span');
+        name.className = 'relative z-10 font-display tracking-widest text-sm font-bold text-white';
+        name.textContent = a.name.toUpperCase();
+        div.appendChild(bg);
+        div.appendChild(name);
+        div.addEventListener('click', function(){
+            state.loadout.arena = a.id;
+            renderArenas();
+            CameraController.applyArenaTheme(a.id);
+            SFX.click();
+        });
+        c.appendChild(div);
+    });
+}
+
+function renderProfile(){
+    var p = state.profile;
+    var wr = p.wins + p.losses > 0 ? Math.round((p.wins / (p.wins + p.losses)) * 100) : 0;
+    qsa('.prof-name').forEach(function(el){ el.textContent = p.name; });
+    qsa('.prof-rank').forEach(function(el){ el.textContent = p.rank; });
+    qsa('.prof-level').forEach(function(el){ el.textContent = p.level; });
+    $('profile-wins').textContent = p.wins;
+    $('profile-losses').textContent = p.losses;
+    $('profile-winrate').textContent = wr + '%';
+    $('profile-streak').textContent = p.streak;
+}
+
+function syncSettingsUI(){
+    var ts = $('toggle-sound');
+    if(ts) {
+        ts.className = 'toggle-switch w-12 h-7 rounded-full relative transition-transform duration-300 ease-out ' + (state.settings.sound ? 'bg-primary' : 'bg-surface-light');
+        ts.querySelector('.knob').style.transform = state.settings.sound ? 'translateX(20px)' : 'translateX(0)';
+    }
+    var th = $('toggle-haptics');
+    if(th) {
+        th.className = 'toggle-switch w-12 h-7 rounded-full relative transition-transform duration-300 ease-out ' + (state.settings.haptics ? 'bg-primary' : 'bg-surface-light');
+        th.querySelector('.knob').style.transform = state.settings.haptics ? 'translateX(20px)' : 'translateX(0)';
+    }
+    qsa('.btn-diff').forEach(function(b){
+        if(b.dataset.val === state.settings.difficulty){ b.classList.add('bg-primary', 'text-surface'); b.classList.remove('bg-surface-light', 'text-white/70'); }
+        else { b.classList.remove('bg-primary', 'text-surface'); b.classList.add('bg-surface-light', 'text-white/70'); }
+    });
+    var sl = $('sensitivity-slider') || $('sens-slider');
+    if(sl) sl.value = state.settings.sensitivity;
+}
+
+$('toggle-sound').addEventListener('click', function(){ state.settings.sound = !state.settings.sound; syncSettingsUI(); SFX.click(); });
+$('toggle-haptics').addEventListener('click', function(){ state.settings.haptics = !state.settings.haptics; syncSettingsUI(); SFX.click(); if(state.settings.haptics) haptic(30); });
+qsa('.btn-diff').forEach(function(b){
+    b.addEventListener('click', function(){
+        state.settings.difficulty = b.dataset.val;
+        syncSettingsUI();
+        SFX.click();
+        UIRenderer.toast('DIFFICULTY: ' + state.settings.difficulty.toUpperCase());
+    });
+});
+var _sl = $('sensitivity-slider') || $('sens-slider'); if(_sl) _sl.addEventListener('input', function(e){ state.settings.sensitivity = parseInt(e.target.value, 10); });
+
+function runDiagnostics(){
+    var g = $('sys-graph');
+    g.innerHTML = '';
+    for(var i=0;i<24;i++){
+        var bar = document.createElement('div');
+        bar.className = 'w-2 bg-primary/40 rounded-t';
+        bar.style.height = rand(20, 100) + '%';
+        g.appendChild(bar);
+    }
+    setInterval(function(){
+        if(state.activePanel !== 'panel-log') return;
+        g.removeChild(g.firstChild);
+        var bar = document.createElement('div');
+        bar.className = 'w-2 bg-primary/60 rounded-t';
+        bar.style.height = rand(20, 100) + '%';
+        g.appendChild(bar);
+    }, 400);
+}
+
+function newMatchState(mode, opponent){
+    return {
+        mode: mode,
+        opponent: opponent,
+        active: true,
+        paused: false,
+        autoPaused: false,
+        timer: 90,
+        overtimeUsed: false,
+        playerRemaining: 10,
+        aiRemaining: 10,
+        power: 75,
+        powerDir: 1,
+        turn: 'player',
+        busy: false,
+        trickArmed: false,
+        trickMeter: 0,
+        wind: 'LOW',
+        spin: false,
+        attempts: 0,
+        hits: 0,
+        timerHandle: null,
+        powerHandle: null
+    };
+}
+
+function startMatch(mode, opponent){
+    UIRenderer.closePanel();
+    state.match = newMatchState(mode, opponent || 'CYBER_VOID');
+    CupManager.buildCups();
+    BallController.resetBallPosition('player');
+    UIRenderer.showScreen('screen-game');
+    Renderer.sizeAimSvg();
+    resetAimHud();
+    
+    startTimer();
+    UIRenderer.toast((mode || 'QUICK').toUpperCase() + ' MATCH VS ' + (opponent || 'CYBER_VOID'));
+}
+
+function endMatchCleanup(){
+    var m = state.match;
+    if(!m) return;
+    if(m.timerHandle) clearInterval(m.timerHandle);
+    
+    m.active = false;
+}
+
+function startTimer(){
+    var m = state.match;
+    $('game-timer').textContent = m.timer;
+    $('game-timer').style.color = '#00f3ff';
+    m.timerHandle = setInterval(function(){
+        if(m.paused || m.autoPaused || !m.active || m.busy) return;
+        m.timer--;
+        if(m.timer <= 15) $('game-timer').style.color = '#ff5566';
+        if(m.timer <= 5 && m.timer > 0) SFX.click();
+        if(m.timer <= 0){
+            $('game-timer').textContent = '00';
+            clearInterval(m.timerHandle);
+            if(m.playerRemaining === m.aiRemaining && !m.overtimeUsed){
+                m.overtimeUsed = true;
+                m.timer = 30;
+                $('game-timer').style.color = '#ffd23f';
+                UIRenderer.toast('OVERTIME PROTOCOL ACTIVATED');
+                SFX.open();
+                startTimer();
+            } else {
+                finishMatch(m.playerRemaining < m.aiRemaining ? 'win' : (m.aiRemaining < m.playerRemaining ? 'lose' : 'draw'));
+            }
+        } else {
+            $('game-timer').textContent = m.timer < 10 ? '0'+m.timer : m.timer;
+        }
+    }, 1000);
+}
+
+
+
+// Ensure any missing UI functions that use original names are mapped to UIRenderer methods:
+window.toast = UIRenderer.toast;
+window.showScreen = UIRenderer.showScreen;
+window.openPanel = UIRenderer.openPanel;
+window.closePanel = UIRenderer.closePanel;
+window.openModal = UIRenderer.openModal;
+window.closeModal = UIRenderer.closeModal;
+
+
+qsa('.btn-close-panel').forEach(function(btn){
+    btn.addEventListener('click', function(){
+        if(window.UIRenderer) UIRenderer.closePanel();
+        if(window.SFX) SFX.click();
+    });
+});
+$('panel-backdrop').addEventListener('click', function(){
+    if(window.UIRenderer) UIRenderer.closePanel();
+});
+class PhysicsEngine {
+    constructor() {
+      // 1 mm = 1 unit. Standard ping pong ball: 40mm diameter. 
+      // Gravity = 6000 mm/s^2 (tuned for gameplay feel)
+      this.GRAVITY = 6000; 
+      this.BALL_R = 13; // Scaled to fit the game's cup sizes visually
+      this.AIR_DENSITY = 1.225e-9; // kg/mm^3
+      this.BALL_MASS = 0.0027; // kg (2.7 grams)
+      this.BALL_AREA = Math.PI * 13 * 13; // mm^2
+      this.DRAG_COEFF = 0.47;
+      
+      this.TABLE_BOUNCE_E = 0.85; // high restitution
+      this.RIM_BOUNCE_E = 0.70;   // rim restitution
+      this.CUP_WALL_E = 0.35;     // cup plastic wall restitution
+      this.CUP_FLOOR_E = 0.20;    // cup interior floor restitution
+      
+      this.SLIDE_FRICTION = 0.25;
+      this.ROLL_FRICTION = 0.02;
+      this.SPIN_DECAY = 0.5; // rad/s^2
+
+      this.STOP_SPEED = 15; // mm/s
+      
+      this.FIXED_DT = 1 / 120; // 120Hz fixed timestep
+      
+      this.liveSimulations = [];
+    }
+    
+    stop() {
+        this.liveSimulations = [];
+    }
+    
+    parseCups(cupEls, difficulty) {
+      var diffSizes = { easy: 4.0, normal: 0, hard: -2.0 };
+      var szOffset = diffSizes[difficulty] || 0;
+      
+      var cups = [];
+      for(var i=0; i<cupEls.length; i++){
+          var el = cupEls[i];
+          var cx = parseFloat(el.dataset.cx);
+          var cy = parseFloat(el.dataset.cy);
+          var w = parseFloat(el.dataset.cw);
+          
+          if (isNaN(cx) || isNaN(cy) || isNaN(w)) {
+              var rect = el.getBoundingClientRect();
+              cx = rect.left + rect.width / 2;
+              cy = rect.top + rect.height / 2;
+              w = rect.width;
+              el.dataset.cx = cx;
+              el.dataset.cy = cy;
+              el.dataset.cw = w;
+          }
+          
+          var outerTopR = (w / 2) + szOffset;
+          var innerTopR = Math.max(8, outerTopR - 2.0); // 2mm rim wall thickness
+          
+          var outerBottomR = (w * 0.36) + szOffset;
+          var innerBottomR = Math.max(5, outerBottomR - 2.0);
+          
+          var cupHeight = w * 1.25; // 3D cup height proportional to diameter
+          var rimTubeRadius = (outerTopR - innerTopR) / 2;
+          var rimCenterRadius = (outerTopR + innerTopR) / 2;
+          
+          cups.push({
+             el: el,
+             cx: cx,
+             cy: cy,
+             colliders: {
+                // 1. Rim collider (3D torus ring at top of cup)
+                rimCenterR: rimCenterRadius, 
+                rimTubeR: Math.max(1.5, rimTubeRadius), 
+                rimZ: cupHeight,
+
+                // 2. Outer wall frustum
+                outerTopR: outerTopR,
+                outerBottomR: outerBottomR,
+
+                // 3. Inner wall frustum
+                innerTopR: innerTopR,
+                innerBottomR: innerBottomR,
+
+                // 4. Opening (top aperture at cupHeight)
+                openingR: innerTopR,
+                height: cupHeight,
+
+                // 5. Interior & Bottom floor
+                bottomZ: 2.0 // 2mm interior floor offset above table surface
+             }
+          });
+      }
+      return cups;
+    }
+    
+    // Fixed physics step driven by accumulator loop
+    fixedUpdate(dt) {
+        let stepDt = dt || this.FIXED_DT;
+        for (let i = this.liveSimulations.length - 1; i >= 0; i--) {
+            let sim = this.liveSimulations[i];
+            if (!sim.settled) {
+                sim.prevX = sim.x;
+                sim.prevY = sim.y;
+                sim.prevZ = sim.z;
+                
+                this.step(sim, stepDt, sim.tableRect, sim.cups, sim.windAccel);
+                
+                if (sim.onUpdate) sim.onUpdate(sim);
+                
+                // Settlement check: NO circular hitboxes or magnetic snaps.
+                let hs = Math.sqrt(sim.vx*sim.vx + sim.vy*sim.vy);
+                if (sim.insideCup) {
+                    let bFloorZ = sim.insideCup.colliders.bottomZ;
+                    if (Math.abs(sim.vz) < 25 && sim.z <= bFloorZ + 3.0 && hs < this.STOP_SPEED) {
+                        sim.settled = true;
+                        sim.outcome = 'hit';
+                        sim.hitCupEl = sim.insideCup.el;
+                    }
+                } else if (sim.z <= 0.5 && hs < this.STOP_SPEED) {
+                    sim.settled = true;
+                    sim.outcome = sim.outcome || 'miss';
+                }
+                
+                if (sim.settled) {
+                    if (sim.onComplete) sim.onComplete(sim);
+                    this.liveSimulations.splice(i, 1);
+                }
+            }
+        }
+    }
+    
+    startLiveSimulation(state, cups, tableRect, windAccel, onUpdate, onComplete) {
+        let sim = {
+            ...state,
+            prevX: state.x,
+            prevY: state.y,
+            prevZ: state.z,
+            cups: cups,
+            tableRect: tableRect,
+            windAccel: windAccel,
+            onUpdate: onUpdate,
+            onComplete: onComplete,
+            bounces: 0,
+            insideCup: null,
+            settled: false,
+            outcome: null,
+            hitCupEl: null,
+            event: null
+        };
+        this.liveSimulations.push(sim);
+        return sim;
+    }
+
+    // Clone a state for prediction
+    cloneState(s) {
+        return {
+            x: s.x, y: s.y, z: s.z || 0,
+            prevX: s.x, prevY: s.y, prevZ: s.z || 0,
+            vx: s.vx, vy: s.vy, vz: s.vz,
+            angularVelocityX: s.angularVelocityX || 0,
+            angularVelocityZ: s.angularVelocityZ || 0,
+            angularVelocityY: s.angularVelocityY || 0,
+            bounces: s.bounces || 0,
+            insideCup: s.insideCup || null,
+            settled: s.settled || false,
+            outcome: s.outcome || null,
+            hitCupEl: s.hitCupEl || null,
+            event: s.event || null
+        };
+    }
+
+    // Step physics forward by dt using sub-stepping for CCD
+    step(s, dt, tableRect, cups, windAccel) {
+        let steps = 10; // high substeps for basic CCD
+        let sub_dt = dt / steps;
+        
+        for (let step = 1; step <= steps; step++) {
+            this.subStep(s, sub_dt, tableRect, cups, windAccel);
+        }
+    }
+
+    subStep(s, dt, tableRect, cups, windAccel) {
+        // 1. Compute forces (Drag, Magnus, Gravity, Wind)
+        let vMag = Math.sqrt(s.vx*s.vx + s.vy*s.vy + s.vz*s.vz);
+        if (vMag > 0.001) {
+            // Air drag
+            let dragForce = 0.5 * this.AIR_DENSITY * vMag * vMag * this.DRAG_COEFF * this.BALL_AREA;
+            let dragAccel = dragForce / this.BALL_MASS;
+            
+            s.vx -= (s.vx / vMag) * dragAccel * dt;
+            s.vy -= (s.vy / vMag) * dragAccel * dt;
+            s.vz -= (s.vz / vMag) * dragAccel * dt;
+            
+            // Magnus effect (spin)
+            let wx = s.angularVelocityX || 0;
+            let wy = s.angularVelocityY || 0;
+            let wz = s.angularVelocityZ || 0;
+            
+            let cx = wy * s.vz - wz * s.vy;
+            let cy = wz * s.vx - wx * s.vz;
+            let cz = wx * s.vy - wy * s.vx;
+            
+            let magnusCoeff = 0.0001;
+            s.vx += cx * magnusCoeff * dt;
+            s.vy += cy * magnusCoeff * dt;
+            s.vz += cz * magnusCoeff * dt;
+        }
+        
+        // Gravity & Wind (No magnetic forces anywhere!)
+        s.vz -= this.GRAVITY * dt;
+        if (windAccel) {
+            s.vx += windAccel * dt;
+        }
+
+        // Apply angular decay
+        let spinMag = Math.sqrt((s.angularVelocityX||0)**2 + (s.angularVelocityY||0)**2 + (s.angularVelocityZ||0)**2);
+        if (spinMag > 0) {
+            let decay = this.SPIN_DECAY * dt;
+            let ratio = Math.max(0, spinMag - decay) / spinMag;
+            s.angularVelocityX *= ratio;
+            s.angularVelocityY *= ratio;
+            s.angularVelocityZ *= ratio;
+        }
+
+        s.event = null;
+
+        // 2. Position update step
+        let nextX = s.x + s.vx * dt;
+        let nextY = s.y + s.vy * dt;
+        let nextZ = s.z + s.vz * dt;
+        
+        // 3. Detailed 3D Cup Collisions
+        for(let i = 0; i < cups.length; i++) {
+            let g = cups[i];
+            let c = g.colliders;
+            
+            let dx = nextX - g.cx;
+            let dy = nextY - g.cy;
+            let dist2D = Math.sqrt(dx*dx + dy*dy);
+            
+            // Broadphase spatial pruning
+            if (dist2D > c.outerTopR + this.BALL_R + 60) continue;
+            
+            let uX = dist2D > 0.0001 ? dx / dist2D : 1;
+            let uY = dist2D > 0.0001 ? dy / dist2D : 0;
+            let ballCenterZ = nextZ + this.BALL_R;
+
+            // --- A. RIM COLLIDER (3D Torus Ring at z = height) ---
+            let ringX = g.cx + c.rimCenterR * uX;
+            let ringY = g.cy + c.rimCenterR * uY;
+            let ringZ = c.rimZ;
+            
+            let rx = nextX - ringX;
+            let ry = nextY - ringY;
+            let rz = ballCenterZ - ringZ;
+            let distToRing = Math.sqrt(rx*rx + ry*ry + rz*rz);
+            
+            if (distToRing < this.BALL_R + c.rimTubeR) {
+                let nx = distToRing > 0.0001 ? rx / distToRing : uX;
+                let ny = distToRing > 0.0001 ? ry / distToRing : uY;
+                let nz = distToRing > 0.0001 ? rz / distToRing : 0;
+                
+                let vn = s.vx * nx + s.vy * ny + s.vz * nz;
+                if (vn < 0) {
+                    s.vx -= (1 + this.RIM_BOUNCE_E) * vn * nx;
+                    s.vy -= (1 + this.RIM_BOUNCE_E) * vn * ny;
+                    s.vz -= (1 + this.RIM_BOUNCE_E) * vn * nz;
+                    
+                    // Categorize rim interactions: rim shot, lip-in, lip-out
+                    let inwardDir = (-uX * s.vx) + (-uY * s.vy);
+                    if (s.vz < 0 && inwardDir > 0) {
+                        s.event = 'lip-in';
+                    } else if (inwardDir <= 0 && (s.vx*uX + s.vy*uY) > 0) {
+                        s.event = 'lip-out';
+                    } else {
+                        s.event = 'rim';
+                    }
+                }
+                
+                // Push ball out of rim tube penetration
+                let push = (this.BALL_R + c.rimTubeR) - distToRing;
+                nextX += nx * push;
+                nextY += ny * push;
+                nextZ += nz * push;
+                
+                dx = nextX - g.cx;
+                dy = nextY - g.cy;
+                dist2D = Math.sqrt(dx*dx + dy*dy);
+                uX = dist2D > 0.0001 ? dx / dist2D : 1;
+                uY = dist2D > 0.0001 ? dy / dist2D : 0;
+                ballCenterZ = nextZ + this.BALL_R;
+            }
+            
+            // --- B. OPENING (Top aperture at z = height) ---
+            if (!s.insideCup && nextZ <= c.height && (nextZ - s.vz*dt) > c.height - 10) {
+                if (dist2D < c.openingR) {
+                    s.insideCup = g;
+                    let speed = Math.sqrt(s.vx*s.vx + s.vy*s.vy + s.vz*s.vz);
+                    s.event = (speed < 250 && dist2D < c.openingR * 0.6) ? 'soft-drop' : 'enter';
+                }
+            }
+            if (s.insideCup === g && nextZ > c.height) {
+                s.insideCup = null;
+            }
+            
+            let zFrac = Math.max(0, Math.min(1, ballCenterZ / c.height));
+            
+            // --- C. OUTER WALL COLLIDER (Frustum Surface) ---
+            if (!s.insideCup) {
+                if (nextZ < c.height && nextZ > 0) {
+                    let outerRAtZ = c.outerBottomR + (c.outerTopR - c.outerBottomR) * zFrac;
+                    if (dist2D < outerRAtZ + this.BALL_R) {
+                        let slope = (c.outerTopR - c.outerBottomR) / c.height;
+                        let nx = uX;
+                        let ny = uY;
+                        let nz = -slope;
+                        let nLen = Math.sqrt(nx*nx + ny*ny + nz*nz);
+                        nx /= nLen; ny /= nLen; nz /= nLen;
+                        
+                        let vn = s.vx * nx + s.vy * ny + s.vz * nz;
+                        if (vn < 0) {
+                            s.vx -= (1 + this.CUP_WALL_E) * vn * nx;
+                            s.vy -= (1 + this.CUP_WALL_E) * vn * ny;
+                            s.vz -= (1 + this.CUP_WALL_E) * vn * nz;
+                            s.event = 'hard-rebound';
+                        }
+                        
+                        let push = (outerRAtZ + this.BALL_R) - dist2D;
+                        nextX += uX * push;
+                        nextY += uY * push;
+                        
+                        dx = nextX - g.cx;
+                        dy = nextY - g.cy;
+                        dist2D = Math.sqrt(dx*dx + dy*dy);
+                        uX = dist2D > 0.0001 ? dx / dist2D : 1;
+                        uY = dist2D > 0.0001 ? dy / dist2D : 0;
+                    }
+                }
+            }
+            
+            // --- D. INNER WALL COLLIDER (Interior Frustum) ---
+            if (s.insideCup === g) {
+                let innerRAtZ = c.innerBottomR + (c.innerTopR - c.innerBottomR) * zFrac;
+                if (dist2D + this.BALL_R > innerRAtZ && nextZ < c.height) {
+                    let slope = (c.innerTopR - c.innerBottomR) / c.height;
+                    let nx = -uX;
+                    let ny = -uY;
+                    let nz = slope;
+                    let nLen = Math.sqrt(nx*nx + ny*ny + nz*nz);
+                    nx /= nLen; ny /= nLen; nz /= nLen;
+                    
+                    let vn = s.vx * nx + s.vy * ny + s.vz * nz;
+                    if (vn < 0) {
+                        s.vx -= (1 + this.CUP_WALL_E) * vn * nx;
+                        s.vy -= (1 + this.CUP_WALL_E) * vn * ny;
+                        s.vz -= (1 + this.CUP_WALL_E) * vn * nz;
+                        s.event = 'interior-bounce';
+                    }
+                    let push = (dist2D + this.BALL_R) - innerRAtZ;
+                    nextX -= uX * push;
+                    nextY -= uY * push;
+                    
+                    dx = nextX - g.cx;
+                    dy = nextY - g.cy;
+                    dist2D = Math.sqrt(dx*dx + dy*dy);
+                    uX = dist2D > 0.0001 ? dx / dist2D : 1;
+                    uY = dist2D > 0.0001 ? dy / dist2D : 0;
+                }
+                
+                // --- E. BOTTOM FLOOR DISC ---
+                if (nextZ <= c.bottomZ) {
+                    if (s.vz < 0) {
+                        s.bounces++;
+                        s.vz = Math.abs(s.vz) * this.CUP_FLOOR_E;
+                        
+                        let vtX = s.vx;
+                        let vtY = s.vy;
+                        let vtMag = Math.sqrt(vtX*vtX + vtY*vtY);
+                        if (vtMag > 0) {
+                            let friction = this.SLIDE_FRICTION * Math.abs(s.vz);
+                            let loss = Math.min(vtMag, friction);
+                            s.vx -= (vtX/vtMag) * loss;
+                            s.vy -= (vtY/vtMag) * loss;
+                        }
+                        if (s.vz < 20) s.vz = 0;
+                        s.event = 'floor-bounce';
+                    }
+                    nextZ = Math.max(nextZ, c.bottomZ);
+                }
+            }
+        }
+        
+        // 4. Ground / Table Surface Collision
+        if (!s.insideCup) {
+            let tableHeight = 0;
+            let GROUND_Z = -500;
+            
+            if (nextZ <= tableHeight) {
+                if (tableRect && nextX >= tableRect.left && nextX <= tableRect.right && nextY >= tableRect.top && nextY <= tableRect.bottom) {
+                    if (s.vz < 0) {
+                        s.bounces++;
+                        s.vz = Math.abs(s.vz) * this.TABLE_BOUNCE_E;
+                        s.event = 'bounce';
+                        
+                        let vtX = s.vx;
+                        let vtY = s.vy;
+                        let vtMag = Math.sqrt(vtX*vtX + vtY*vtY);
+                        if (vtMag > 0) {
+                            let slideLoss = this.SLIDE_FRICTION * Math.abs(s.vz);
+                            let rollLoss = this.ROLL_FRICTION * dt * 9800;
+                            let totalLoss = Math.min(vtMag, slideLoss + rollLoss);
+                            s.vx -= (vtX/vtMag) * totalLoss;
+                            s.vy -= (vtY/vtMag) * totalLoss;
+                        }
+                        
+                        if (s.vz < 30) s.vz = 0;
+                    }
+                    nextZ = tableHeight;
+                } else if (nextZ <= GROUND_Z) {
+                    nextZ = GROUND_Z;
+                    s.vx = 0; s.vy = 0; s.vz = 0;
+                    s.settled = true;
+                }
+            }
+            
+            // Table Edges
+            if(tableRect && nextZ >= tableHeight - 20 && nextZ <= tableHeight + 20){
+                if(nextX < tableRect.left + this.BALL_R){ nextX = tableRect.left + this.BALL_R; s.vx = Math.abs(s.vx) * 0.5; }
+                if(nextX > tableRect.right - this.BALL_R){ nextX = tableRect.right - this.BALL_R; s.vx = -Math.abs(s.vx) * 0.5; }
+                if(nextY < tableRect.top + this.BALL_R){ nextY = tableRect.top + this.BALL_R; s.vy = Math.abs(s.vy) * 0.5; }
+                if(nextY > tableRect.bottom - this.BALL_R){ nextY = tableRect.bottom - this.BALL_R; s.vy = -Math.abs(s.vy) * 0.5; }
+            }
+        }
+        
+        s.x = nextX;
+        s.y = nextY;
+        s.z = nextZ;
+    }
+}
+window.PhysicsEngine = PhysicsEngine;
+class Renderer {
+    static ballEl = null;
+    static shadowEl = null;
+    static lastPreviewRef = null;
+    
+    static getBall() {
+        if (!Renderer.ballEl) Renderer.ballEl = document.getElementById('ball');
+        return Renderer.ballEl;
+    }
+    
+    static getShadow() {
+        if (!Renderer.shadowEl) Renderer.shadowEl = document.getElementById('ball-shadow');
+        return Renderer.shadowEl;
+    }
+
+    static renderPreview(ctx, sol, pullPoint, valid, grazedRim, firstRimSample){
+      if(!ctx) return;
+      var w = ctx.canvas.width;
+      var h = ctx.canvas.height;
+      ctx.clearRect(0, 0, w, h);
+      if(!valid || !sol) return;
+      
+      var bs = sol.ballStart;
+      var grazed = grazedRim;
+      var color = sol.outcome === 'hit' ? '#39ff8c' : (grazed ? '#ffd23f' : '#00f3ff');
+      
+      // Draw target line
+      var last = sol.samples[sol.samples.length - 1];
+      var lx = last.x, ly = last.y - last.z*0.85;
+      
+      ctx.beginPath();
+      ctx.moveTo(sol.target.x, sol.target.y);
+      ctx.lineTo(lx, ly);
+      ctx.strokeStyle = 'rgba(255, 46, 196, 0.4)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([2, 5]);
+      ctx.stroke();
+      
+      // Draw pull line
+      if(pullPoint){
+        ctx.beginPath();
+        ctx.moveTo(bs.x, bs.y);
+        ctx.lineTo(pullPoint.x, pullPoint.y);
+        ctx.strokeStyle = 'rgba(255, 46, 196, 0.85)';
+        ctx.lineWidth = 3;
+        ctx.setLineDash([6, 7]);
+        ctx.lineCap = 'round';
+        ctx.stroke();
+      }
+      
+      // Draw trajectory polyline
+      var step = Math.max(1, Math.floor(sol.samples.length / 70));
+      ctx.beginPath();
+      for(var i=0; i<sol.samples.length; i+=step){
+        var p = sol.samples[i];
+        var px = p.x, py = p.y - p.z*0.85;
+        if(i===0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 3;
+      ctx.setLineDash([2, 10]);
+      ctx.globalAlpha = 0.95;
+      ctx.lineCap = 'round';
+      ctx.stroke();
+      
+      ctx.setLineDash([]);
+      
+      // Draw bounce markers
+      ctx.fillStyle = '#00f3ff';
+      ctx.globalAlpha = 0.8;
+      sol.samples.forEach(function(p){
+        if(p.event === 'bounce'){
+          ctx.beginPath();
+          ctx.arc(p.x, p.y - p.z*0.85, 3, 0, Math.PI*2);
+          ctx.fill();
+        }
+      });
+      
+      // Draw impact force
+      if (sol.impactForce) {
+          ctx.fillStyle = color;
+          ctx.font = '10px monospace';
+          ctx.textAlign = 'center';
+          ctx.fillText((sol.impactForce / 10).toFixed(0) + ' N', lx, ly - 20);
+      }
+      
+      // Draw rim marker
+      var rimSample = firstRimSample;
+      if(rimSample){
+        var rx = rimSample.x, ry = rimSample.y - rimSample.z*0.85;
+        ctx.beginPath();
+        ctx.arc(rx, ry, 10, 0, Math.PI*2);
+        ctx.strokeStyle = '#ffd23f';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([3, 4]);
+        ctx.globalAlpha = 0.9;
+        ctx.stroke();
+        ctx.setLineDash([]);
+        
+        ctx.beginPath();
+        ctx.arc(rx, ry, 2.5, 0, Math.PI*2);
+        ctx.fillStyle = '#ffd23f';
+        ctx.fill();
+      }
+      
+      // Draw final target circle
+      ctx.globalAlpha = 0.95;
+      ctx.beginPath();
+      ctx.arc(lx, ly, 15, 0, Math.PI*2);
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+      
+      ctx.beginPath();
+      ctx.arc(lx, ly, 3.5, 0, Math.PI*2);
+      ctx.fillStyle = color;
+      ctx.fill();
+      
+      ctx.globalAlpha = 1.0;
+    }
+
+    static DOM = { initialized: false };
+    static initDOM() {
+        if (Renderer.DOM.initialized) return;
+        Renderer.DOM.crosshairEl = document.getElementById('aim-crosshair');
+        Renderer.DOM.powerFillEl = document.getElementById('power-fill');
+        Renderer.DOM.canvas = document.getElementById('aim-layer-canvas');
+        Renderer.DOM.ctx = Renderer.DOM.canvas ? Renderer.DOM.canvas.getContext('2d') : null;
+        Renderer.DOM.initialized = true;
+    }
+
+    // Passive consumer of game state with frame interpolation factor alpha [0, 1]
+    static render(state, alpha) {
+        if (!state) return;
+        Renderer.initDOM();
+        
+        let ball = Renderer.getBall();
+        let shadow = Renderer.getShadow();
+        let a = (alpha !== undefined) ? Math.max(0, Math.min(1, alpha)) : 1.0;
+        
+        if (ball && state.ball && state.ball.active) {
+            let pt = state.ball;
+            
+            // Interpolate position between previous and current physics steps
+            let ix = (pt.prevX !== undefined) ? pt.prevX + (pt.x - pt.prevX) * a : pt.x;
+            let iy = (pt.prevY !== undefined) ? pt.prevY + (pt.y - pt.prevY) * a : pt.y;
+            let iz = (pt.prevZ !== undefined) ? pt.prevZ + (pt.z - pt.prevZ) * a : pt.z;
+            
+            let lift = iz * 0.85;
+            let br = window.Thrower ? window.Thrower.engine.BALL_R : 13;
+            let bx = ix - br;
+            let by = iy - br - lift;
+            let scaleDepth = pt.scaleDepth || 1;
+            let shadowScale = pt.shadowScale || 1;
+            let shadowOpacity = pt.shadowOpacity || 1;
+            
+            let bTransform = 'translate3d(' + bx.toFixed(1) + 'px, ' + by.toFixed(1) + 'px, 0) scale(' + scaleDepth.toFixed(3) + ')';
+            if (Renderer.lastBTransform !== bTransform) {
+                ball.style.transform = bTransform;
+                Renderer.lastBTransform = bTransform;
+            }
+            if (shadow) {
+                let sx = ix - (br * 0.85);
+                let sy = iy - (br * 0.27);
+                let sTransform = 'translate3d(' + sx.toFixed(1) + 'px, ' + sy.toFixed(1) + 'px, 0) scale(' + (scaleDepth * shadowScale).toFixed(3) + ')';
+                if (Renderer.lastSTransform !== sTransform) {
+                    shadow.style.transform = sTransform;
+                    shadow.style.opacity = shadowOpacity.toFixed(2);
+                    Renderer.lastSTransform = sTransform;
+                }
+            }
+        }
+        
+        // Passive Aim UI Rendering
+        if (state.aim) {
+            let crosshairEl = Renderer.DOM.crosshairEl;
+            if (crosshairEl) {
+                if (state.aim.crosshair.show) {
+                    let cTransform = 'translate3d(' + state.aim.crosshair.x.toFixed(1) + 'px, ' + state.aim.crosshair.y.toFixed(1) + 'px, 0)';
+                    if (Renderer.lastCTransform !== cTransform) {
+                        crosshairEl.style.transform = cTransform;
+                        Renderer.lastCTransform = cTransform;
+                    }
+                    if (!Renderer.lastCShow) { crosshairEl.classList.add('show'); Renderer.lastCShow = true; }
+                    let locked = state.aim.crosshair.locked;
+                    if (Renderer.lastCLocked !== locked) {
+                        crosshairEl.classList.toggle('locked', locked);
+                        Renderer.lastCLocked = locked;
+                    }
+                } else {
+                    if (Renderer.lastCShow) { crosshairEl.classList.remove('show'); Renderer.lastCShow = false; }
+                }
+            }
+            
+            let powerFillEl = Renderer.DOM.powerFillEl;
+            if (powerFillEl) {
+                let pHeight = (state.aim.powerPct || 0) + '%';
+                if (Renderer.lastPHeight !== pHeight) {
+                    powerFillEl.style.height = pHeight;
+                    Renderer.lastPHeight = pHeight;
+                }
+            }
+            
+            // Draw preview when preview object changes (Passive - NO STATE MUTATION)
+            if (state.aim.preview !== Renderer.lastPreviewRef) {
+                Renderer.lastPreviewRef = state.aim.preview;
+                let canvas = Renderer.DOM.canvas;
+                if (canvas) {
+                    let ctx = Renderer.DOM.ctx;
+                    if (state.aim.preview) {
+                        Renderer.renderPreview(
+                            ctx, 
+                            state.aim.preview.sol, 
+                            state.aim.preview.pullStart, 
+                            true, 
+                            state.aim.preview.grazedRim, 
+                            state.aim.preview.firstRimSample
+                        );
+                    } else if (ctx) {
+                        ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    }
+                }
+            }
+            
+            // Target cup highlight
+            let targetCup = state.aim.targetCup;
+            if (Renderer.lastTargetCup !== targetCup) {
+                if (Renderer.lastTargetCup) Renderer.lastTargetCup.classList.remove('cup-target');
+                if (targetCup) targetCup.classList.add('cup-target');
+                Renderer.lastTargetCup = targetCup;
+            }
+        }
+        
+        if (window.UIRenderer) UIRenderer.render(state);
+    }
+
+    static sizeAimSvg() {
+        qsa('.cup').forEach(function(c) {
+            delete c.dataset.cx;
+            delete c.dataset.cy;
+            delete c.dataset.cw;
+        });
+        if(window.Aim && window.Aim.resizeCanvas) window.Aim.resizeCanvas();
+    }
+}
+window.Renderer = Renderer;
+window.sizeAimSvg = Renderer.sizeAimSvg;
+class ThrowController {
+    constructor(engine, predictor){
+        this.engine = engine;
+        this.predictor = predictor;
+        
+        // Throw configuration
+        this.MAX_PULL_DIST = 250;
+        this.MIN_PULL = 20;
+        this.BASE_VZ = 350;
+        this.MAX_ADDITIONAL_VZ = 1000;
+        
+        // Touch smoothing
+        this.smoothedPull = { x: 0, y: 0 };
+        this.SMOOTH_FACTOR = 0.4;
+    }
+
+    updateInput(rawPull) {
+        var now = performance.now();
+        var dt = (now - (this.lastInputTime || now)) / 1000.0;
+        this.lastInputTime = now;
+        
+        if (dt > 0.1 || !this.isPulling) {
+            // Reset if it's been too long or just started
+            this.smoothedPull.x = rawPull.x;
+            this.smoothedPull.y = rawPull.y;
+            this.isPulling = true;
+        } else {
+            // Frame-rate independent exponential smoothing
+            // We want it to be responsive but smooth out micro-jitters
+            // Time constant tau = 0.05 seconds
+            var tau = 0.05;
+            var alpha = 1.0 - Math.exp(-dt / tau);
+            this.smoothedPull.x += (rawPull.x - this.smoothedPull.x) * alpha;
+            this.smoothedPull.y += (rawPull.y - this.smoothedPull.y) * alpha;
+        }
+        return this.smoothedPull;
+    }
+    
+    resetInput() {
+        this.isPulling = false;
+        this.lastInputTime = 0;
+        this.smoothedPull.x = 0;
+        this.smoothedPull.y = 0;
+    }
+
+    computeThrowParams(pull, target, ballStart) {
+        var pullMag = Math.sqrt(pull.x * pull.x + pull.y * pull.y);
+        
+        // Power calculation clamped to max allowed over-pull (1.2x)
+        var power = clamp(pullMag / this.MAX_PULL_DIST, 0, 1.2);
+        
+        // Arc based strictly on vertical pull distance
+        var verticalPull = clamp(pull.y / this.MAX_PULL_DIST, 0, 1.2);
+        
+        // Spin mapped from horizontal pull
+        var spin = clamp(pull.x / 100, -1, 1);
+        
+        // Distance and azimuth to target
+        var targetDist = Math.sqrt(Math.pow(target.x - ballStart.x, 2) + Math.pow(target.y - ballStart.y, 2));
+        var azimuth = Math.atan2(target.y - ballStart.y, target.x - ballStart.x);
+        
+        // Vertical velocity deterministically tied to vertical pull
+        var vz = this.BASE_VZ + (this.MAX_ADDITIONAL_VZ * verticalPull);
+        
+        // Calculate the theoretical time of flight if we had pulled perfectly back to power 1.0
+        var T_actual = (2 * vz) / this.engine.GRAVITY;
+        if (T_actual <= 0) T_actual = 0.1;
+        
+        // The horizontal velocity required to hit the target at actual time of flight
+        var vh_base = targetDist / T_actual;
+        
+        // Actual horizontal velocity scaled linearly by actual power
+        var vh_actual = vh_base * power;
+        
+        var vx = Math.cos(azimuth) * vh_actual;
+        var vy = Math.sin(azimuth) * vh_actual;
+        
+        // Maintain a cached param object to avoid allocating objects per frame
+        if (!this.cachedParams) this.cachedParams = {};
+        this.cachedParams.vx = vx;
+        this.cachedParams.vy = vy;
+        this.cachedParams.vz = vz;
+        this.cachedParams.angularVelocityX = 0;
+        this.cachedParams.angularVelocityZ = spin * 1.5;
+        this.cachedParams.power = power;
+        this.cachedParams.arcFactor = verticalPull;
+        this.cachedParams.spinFactor = spin;
+        
+        return this.cachedParams;
+    }
+
+    computeSolution(pull, target, ballStart, cupsEls, tableRect, difficulty, windAccel, aiCupsRect) {
+        var params = this.computeThrowParams(pull, target, ballStart);
+        
+        if (!this.cachedInit) this.cachedInit = {};
+        this.cachedInit.x = ballStart.x;
+        this.cachedInit.y = ballStart.y;
+        this.cachedInit.z = ballStart.z;
+        this.cachedInit.vx = params.vx;
+        this.cachedInit.vy = params.vy;
+        this.cachedInit.vz = params.vz;
+        this.cachedInit.angularVelocityX = params.angularVelocityX;
+        this.cachedInit.angularVelocityZ = params.angularVelocityZ;
+        
+        // Deterministic simulation
+        var sim = this.predictor.simulate(this.cachedInit, cupsEls, tableRect, difficulty, windAccel);
+        var last = sim.samples[sim.samples.length - 1];
+        
+        // Release quality: perfect unless over-pulling past 1.1x power
+        var releaseQuality = clamp(1 - (params.power > 1.1 ? (params.power - 1.1) * 2 : 0), 0, 1);
+        
+        if (!this.cachedSol) this.cachedSol = { finalTarget: {}, depthRef: {} };
+        this.cachedSol.ballStart = ballStart;
+        this.cachedSol.power = params.power;
+        this.cachedSol.arcFactor = params.arcFactor;
+        this.cachedSol.spinFactor = params.spinFactor;
+        this.cachedSol.samples = sim.samples;
+        this.cachedSol.outcome = sim.outcome;
+        this.cachedSol.hitCupEl = sim.hitCupEl;
+        this.cachedSol.finalTarget.x = last.x;
+        this.cachedSol.initParams = { ...this.cachedInit };
+        this.cachedSol.cupsEls = cupsEls;
+        this.cachedSol.tableRect = tableRect;
+        this.cachedSol.difficulty = difficulty;
+        this.cachedSol.windAccel = windAccel;
+        this.cachedSol.finalTarget.y = last.y;
+        this.cachedSol.releaseQuality = releaseQuality;
+        this.cachedSol.depthRef.startY = ballStart.y;
+        this.cachedSol.depthRef.endY = aiCupsRect ? (aiCupsRect.top + aiCupsRect.height / 2) : ballStart.y;
+        this.cachedSol.grazedRim = this.predictor.grazedRim(sim);
+        this.cachedSol.firstRimSample = this.predictor.firstRimSample(sim);
+        
+        return this.cachedSol;
+    }
+
+    playback(initParams, dt, depthRef, cupsEls, tableRect, difficulty, windAccel){
+      var self = this;
+      return new Promise(function(resolve){
+          let cups = self.engine.parseCups(cupsEls, difficulty);
+          
+          GameStateManager.state.ball.active = true;
+          
+          self.activeSim = self.engine.startLiveSimulation(
+              initParams, cups, tableRect, windAccel,
+              (sim) => {
+                  // onUpdate - update ball position and previous position for rendering interpolation
+                  let state = GameStateManager.state;
+                  state.ball.prevX = (sim.prevX !== undefined) ? sim.prevX : sim.x;
+                  state.ball.prevY = (sim.prevY !== undefined) ? sim.prevY : sim.y;
+                  state.ball.prevZ = (sim.prevZ !== undefined) ? sim.prevZ : sim.z;
+                  state.ball.x = sim.x;
+                  state.ball.y = sim.y;
+                  state.ball.z = sim.z;
+                  
+                  // Update visual depth scale
+                  let pt = state.ball;
+                  let scaleDepth = 1;
+                  if(depthRef){
+                    let isPlayerThrow = depthRef.startY > depthRef.endY;
+                    if(isPlayerThrow){
+                      let span = Math.max(40, depthRef.startY - depthRef.endY);
+                      let t = Math.max(0, Math.min(1, (depthRef.startY - pt.y) / span));
+                      scaleDepth = 1 - t*0.4;
+                    } else {
+                      let span = Math.max(40, depthRef.endY - depthRef.startY);
+                      let t = Math.max(0, Math.min(1, (pt.y - depthRef.startY) / span));
+                      scaleDepth = 0.6 + t*0.4;
+                    }
+                  }
+                  state.ball.scaleDepth = scaleDepth;
+                  state.ball.shadowScale = Math.max(0.2, 1 - (pt.z / 150));
+                  state.ball.shadowOpacity = Math.max(0, 1 - (pt.z / 150));
+              },
+              (sim) => {
+                  // onComplete
+                  resolve(sim);
+              }
+          );
+      });
+    }
+
+    performPlayerThrow(sol){
+      var m = state.match;
+      if (!m || !m.active) return;
+      
+      m.busy = true;
+      m.attempts++;
+      
+      var remainingCups = qsa('#ai-cups .cup:not(.hit)');
+      if(!remainingCups.length){ finishMatch('win'); m.busy = false; return; }
+      
+      var willHit = sol.outcome === 'hit' && !!sol.hitCupEl;
+      var self = this;
+      
+      this.playback(sol.initParams, this.engine.DT, sol.depthRef, sol.cupsEls, sol.tableRect, sol.difficulty, sol.windAccel).then(function(liveSim){
+        willHit = liveSim.outcome === 'hit' && !!liveSim.hitCupEl; // Verify with live sim outcome
+        if (willHit) sol.hitCupEl = liveSim.hitCupEl;
+        if(willHit){
+          m.hits++;
+          sol.hitCupEl.classList.add('hit');
+          m.aiRemaining--;
+          m.trickMeter = clamp(m.trickMeter + 16, 0, 100);
+          
+          if(window.SFX) SFX.hit();
+          if(window.UIRenderer) UIRenderer.toast('CUP DESTROYED');
+          if(window.haptic) haptic(20);
+        } else {
+          if(window.SFX) SFX.miss();
+          if(window.UIRenderer) UIRenderer.toast(sol.grazedRim ? 'RIM OUT — SO CLOSE' : 'SHOT MISSED');
+        }
+        
+        if(window.BallController) BallController.resetBallPosition('player');
+        else if(window.resetBallPosition) resetBallPosition('player');
+        
+        if(m.aiRemaining <= 0){ finishMatch('win'); m.busy=false; return; }
+        
+        m.turn = 'ai';
+        m.busy = false;
+        setTimeout(function(){ if(window.AI) window.AI.performAiThrow(); }, 900);
+      });
+    }
+}
+window.ThrowController = ThrowController;
+class TrajectoryPredictor {
+    constructor(engine) {
+        this.engine = engine;
+    }
+    
+    simulate(init, cupEls, tableRect, difficulty, windAccel) {
+        let cups = this.engine.parseCups(cupEls, difficulty);
+        
+        let simState = this.engine.cloneState(init);
+        let maxSteps = Math.round(5.0 / this.engine.FIXED_DT);
+        let samples = [];
+        
+        // Initial sample
+        samples.push({
+            x: simState.x, y: simState.y, z: simState.z, 
+            event: null, v: Math.sqrt(simState.vx**2 + simState.vy**2 + simState.vz**2)
+        });
+        
+        for (let i = 0; i < maxSteps && !simState.settled; i++) {
+            this.engine.step(simState, this.engine.FIXED_DT, tableRect, cups, windAccel);
+            
+            // Settlement logic
+            let hs = Math.sqrt(simState.vx**2 + simState.vy**2);
+            if (simState.insideCup) {
+                let bFloorZ = simState.insideCup.colliders.bottomZ;
+                if (Math.abs(simState.vz) < 25 && simState.z <= bFloorZ + 3.0 && hs < this.engine.STOP_SPEED) {
+                    simState.settled = true;
+                    simState.outcome = 'hit';
+                    simState.hitCupEl = simState.insideCup.el;
+                }
+            } else if (simState.z <= 0.5 && hs < this.engine.STOP_SPEED) {
+                simState.settled = true;
+                simState.outcome = simState.outcome || 'miss';
+            }
+            
+            samples.push({
+                x: simState.x, y: simState.y, z: Math.max(0, simState.z), 
+                event: simState.event, 
+                v: Math.sqrt(simState.vx**2 + simState.vy**2 + simState.vz**2)
+            });
+        }
+        
+        if (!simState.settled) simState.outcome = simState.outcome || 'miss';
+        
+        let maxImpactV = 0;
+        for (let j = 0; j < samples.length; j++) {
+            if (samples[j].event) {
+                maxImpactV = Math.max(maxImpactV, samples[j].v || 0);
+            }
+        }
+        
+        return {
+            samples: samples,
+            outcome: simState.outcome,
+            hitCupEl: simState.hitCupEl,
+            finalX: simState.x,
+            finalY: simState.y,
+            dt: this.engine.FIXED_DT,
+            impactForce: maxImpactV
+        };
+    }
+    
+    grazedRim(sim) {
+        for(let i=0; i<sim.samples.length; i++){
+            let ev = sim.samples[i].event;
+            if(ev === 'rim' || ev === 'lip-in' || ev === 'lip-out' || ev === 'hard-rebound' || ev === 'wall-bounce') return true;
+        }
+        return false;
+    }
+    
+    firstRimSample(sim) {
+        for(let i=0; i<sim.samples.length; i++){
+            let ev = sim.samples[i].event;
+            if(ev === 'rim' || ev === 'lip-in' || ev === 'lip-out' || ev === 'hard-rebound' || ev === 'wall-bounce') return sim.samples[i];
+        }
+        return null;
+    }
+}
+window.TrajectoryPredictor = TrajectoryPredictor;
+
+class UIRenderer {
+
+    static showScreen(id) {
+        qsa('.screen').forEach(s => s.classList.remove('active'));
+        var el = document.getElementById(id);
+        if (el) el.classList.add('active');
+    }
+    
+    static openPanel(id) {
+        var bd = document.getElementById('panel-backdrop');
+        if (bd) bd.classList.add('open');
+        var el = document.getElementById(id);
+        if (el) el.classList.add('open');
+    }
+    
+    static closePanel() {
+        var bd = document.getElementById('panel-backdrop');
+        if (bd) bd.classList.remove('open');
+        qsa('.sheet').forEach(s => s.classList.remove('open'));
+    }
+    
+    static openModal(id) {
+        var el = document.getElementById(id);
+        if (el) el.classList.add('open');
+    }
+    
+    static closeModal(id) {
+        var el = document.getElementById(id);
+        if (el) el.classList.remove('open');
+    }
+
+    
+    static DOM = { initialized: false };
+    static initDOM() {
+        if (UIRenderer.DOM.initialized) return;
+        UIRenderer.DOM.statsHudEl = document.getElementById('stats-hud');
+        UIRenderer.DOM.arcFillEl = document.getElementById('arc-fill');
+        UIRenderer.DOM.spinFillEl = document.getElementById('spin-fill');
+        UIRenderer.DOM.releaseFillEl = document.getElementById('release-fill');
+        UIRenderer.DOM.releaseReadoutEl = document.getElementById('release-readout');
+        UIRenderer.DOM.pScore = document.getElementById('score-player');
+        UIRenderer.DOM.aScore = document.getElementById('score-ai');
+        UIRenderer.DOM.turnInd = document.getElementById('turn-indicator');
+        UIRenderer.DOM.trickBtn = document.getElementById('btn-trick-shot');
+        UIRenderer.DOM.trickFill = document.getElementById('trick-fill');
+        UIRenderer.DOM.hintEl = document.getElementById('aim-hint');
+        UIRenderer.DOM.powerReadoutEl = document.getElementById('power-readout');
+        UIRenderer.DOM.initialized = true;
+    }
+
+    static render(state) {
+        UIRenderer.initDOM();
+        
+        var m = state.match;
+        if(m) {
+            if (UIRenderer.DOM.pScore) {
+                let pv = 10 - m.aiRemaining;
+                if (UIRenderer.lastPScore !== pv) {
+                    UIRenderer.DOM.pScore.textContent = pv;
+                    UIRenderer.lastPScore = pv;
+                }
+            }
+            if (UIRenderer.DOM.aScore) {
+                let av = 10 - m.playerRemaining;
+                if (UIRenderer.lastAScore !== av) {
+                    UIRenderer.DOM.aScore.textContent = av;
+                    UIRenderer.lastAScore = av;
+                }
+            }
+            if (UIRenderer.DOM.turnInd) {
+                let tText = m.turn === 'player' ? 'YOUR TURN' : 'AI TURN';
+                let tColor = m.turn === 'player' ? '#00f3ff' : '#ff5566';
+                if (UIRenderer.lastTurnText !== tText) {
+                    UIRenderer.DOM.turnInd.textContent = tText;
+                    UIRenderer.DOM.turnInd.style.color = tColor;
+                    UIRenderer.lastTurnText = tText;
+                }
+            }
+            if (UIRenderer.DOM.trickFill && UIRenderer.lastTrickMeter !== m.trickMeter) {
+                UIRenderer.DOM.trickFill.style.width = m.trickMeter + '%';
+                UIRenderer.lastTrickMeter = m.trickMeter;
+                
+                if (UIRenderer.DOM.trickBtn) {
+                    if(m.trickMeter >= 100){
+                        UIRenderer.DOM.trickBtn.classList.add('ready');
+                    } else {
+                        UIRenderer.DOM.trickBtn.classList.remove('ready');
+                        UIRenderer.DOM.trickBtn.classList.remove('trick-armed');
+                    }
+                }
+            }
+        }
+        
+        if (state.aim) {
+            if (UIRenderer.DOM.hintEl) {
+                if (UIRenderer.lastHintText !== state.aim.hintText) {
+                    if(state.aim.hintText !== undefined) UIRenderer.DOM.hintEl.textContent = state.aim.hintText;
+                    UIRenderer.lastHintText = state.aim.hintText;
+                }
+                if (UIRenderer.lastHintOpacity !== state.aim.hintOpacity) {
+                    if(state.aim.hintOpacity !== undefined) UIRenderer.DOM.hintEl.style.opacity = state.aim.hintOpacity;
+                    UIRenderer.lastHintOpacity = state.aim.hintOpacity;
+                }
+            }
+            if (UIRenderer.DOM.powerReadoutEl) {
+                let pText = (state.aim.powerPct || 0) + '%';
+                if (UIRenderer.lastPowerText !== pText) {
+                    UIRenderer.DOM.powerReadoutEl.textContent = pText;
+                    UIRenderer.lastPowerText = pText;
+                }
+            }
+        }
+        
+        if (state.aim && state.aim.statsHudData) {
+            let d = state.aim.statsHudData;
+            if (UIRenderer.DOM.statsHudEl) {
+                if (d.show && !UIRenderer.lastStatsShow) {
+                    UIRenderer.DOM.statsHudEl.classList.add('show');
+                    UIRenderer.lastStatsShow = true;
+                } else if (!d.show && UIRenderer.lastStatsShow) {
+                    UIRenderer.DOM.statsHudEl.classList.remove('show');
+                    UIRenderer.lastStatsShow = false;
+                }
+            }
+            
+            if (d.show) {
+                if (UIRenderer.DOM.arcFillEl && UIRenderer.lastArcPct !== d.arcPct) {
+                    UIRenderer.DOM.arcFillEl.style.width = d.arcPct + '%';
+                    UIRenderer.lastArcPct = d.arcPct;
+                }
+                
+                if (UIRenderer.DOM.spinFillEl && UIRenderer.lastSpinPct !== d.spinPct) {
+                    UIRenderer.DOM.spinFillEl.style.width = Math.abs(d.spinPct) + '%';
+                    UIRenderer.DOM.spinFillEl.style.left = d.spinPct < 0 ? (50 - Math.abs(d.spinPct)/2) + '%' : '50%';
+                    UIRenderer.DOM.spinFillEl.className = 'aim-stat-fill ' + (d.spinPct < 0 ? 'fill-magenta' : 'fill-primary');
+                    UIRenderer.lastSpinPct = d.spinPct;
+                }
+                
+                if (UIRenderer.DOM.releaseFillEl && (UIRenderer.lastRelPct !== d.relPct || UIRenderer.lastOutcome !== d.outcome)) {
+                    UIRenderer.DOM.releaseFillEl.style.width = d.relPct + '%';
+                    UIRenderer.DOM.releaseFillEl.className = 'aim-stat-fill ' + (d.outcome === 'hit' ? 'fill-green' : (d.relPct > 70 ? 'fill-gold' : 'fill-magenta'));
+                    
+                    if (UIRenderer.DOM.releaseReadoutEl) {
+                        UIRenderer.DOM.releaseReadoutEl.textContent = d.relPct + '% ' + (d.outcome === 'hit' ? 'PERFECT' : (d.relPct > 70 ? 'GOOD' : 'OVERPOWERED'));
+                        UIRenderer.DOM.releaseReadoutEl.style.color = d.outcome === 'hit' ? '#39ff8c' : (d.relPct > 70 ? '#ffd23f' : '#ff5566');
+                    }
+                    
+                    UIRenderer.lastRelPct = d.relPct;
+                    UIRenderer.lastOutcome = d.outcome;
+                }
+            }
+        }
+    }
+
+}
+window.toast = UIRenderer.toast;
+window.showScreen = UIRenderer.showScreen;
+window.openPanel = UIRenderer.openPanel;
+window.closePanel = UIRenderer.closePanel;
+window.openModal = UIRenderer.openModal;
+window.closeModal = UIRenderer.closeModal;
+
+function $(id){ return document.getElementById(id); }
+function qsa(sel, ctx){ return Array.prototype.slice.call((ctx||document).querySelectorAll(sel)); }
+function clamp(v,min,max){ return Math.max(min, Math.min(max, v)); }
+function rand(min,max){ return Math.random()*(max-min)+min; }
+function pick(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+window.$ = $;
+window.qsa = qsa;
+window.clamp = clamp;
+window.rand = rand;
+window.pick = pick;

@@ -1,0 +1,6 @@
+{
+  "name": "Cyber Pong",
+  "description": "Physics-based Cyber Pong Arena",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

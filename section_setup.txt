@@ -1,0 +1,78 @@
+
+  var ROW_ORDER_AI = [4,3,2,1];
+  var ROW_ORDER_PLAYER = [1,2,3,4];
+
+  function buildCups(){
+    buildFormation($('ai-cups'), ROW_ORDER_AI, 'ai');
+    buildFormation($('player-cups'), ROW_ORDER_PLAYER, 'player');
+  }
+  function buildFormation(container, rowOrder, team){
+    container.innerHTML = '';
+    var idx = 0;
+    rowOrder.forEach(function(rowSize){
+      var row = document.createElement('div');
+      row.className = 'cup-row';
+      for(var i=0;i<rowSize;i++){
+        var cup = document.createElement('div');
+        cup.className = 'cup cup-' + team;
+        cup.id = team + '-cup-' + idx;
+        cup.dataset.idx = idx;
+        cup.dataset.team = team;
+        var inner = document.createElement('div');
+        inner.className = 'cup-inner';
+        cup.appendChild(inner);
+        row.appendChild(cup);
+        idx++;
+      }
+      container.appendChild(row);
+    });
+  }
+
+  function newMatchState(mode, opponent){
+    return {
+      mode: mode,
+      opponent: opponent,
+      active: true,
+      paused: false,
+      autoPaused: false,
+      timer: 90,
+      overtimeUsed: false,
+      playerRemaining: 10,
+      aiRemaining: 10,
+      power: 75,
+      powerDir: 1,
+      turn: 'player',
+      busy: false,
+      trickArmed: false,
+      trickMeter: 0,
+      wind: 'LOW',
+      spin: false,
+      attempts: 0,
+      hits: 0,
+      timerHandle: null,
+      powerHandle: null
+    };
+  }
+
+  function startMatch(mode, opponent){
+    closePanel();
+    state.match = newMatchState(mode, opponent || 'CYBER_VOID');
+    buildCups();
+    resetBallPosition('player');
+    updateGameHUD();
+    showScreen('screen-game');
+    sizeAimSvg();
+    resetAimHud();
+    startPowerLoop();
+    startTimer();
+    toast((mode || 'QUICK').toUpperCase() + ' MATCH VS ' + (opponent || 'CYBER_VOID'));
+  }
+
+  function endMatchCleanup(){
+    var m = state.match;
+    if(!m) return;
+    if(m.timerHandle) clearInterval(m.timerHandle);
+    if(m.powerHandle) cancelAnimationFrame(m.powerHandle);
+    m.active = false;
+  }
+

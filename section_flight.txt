@@ -1,0 +1,110 @@
+
+  function resetBallPosition(fromTeam){
+    var ball = $('ball');
+    var laneEl = fromTeam === 'player' ? $('player-cups') : $('ai-cups');
+    var rect = laneEl.getBoundingClientRect();
+    ball.style.transform = '';
+    var x = rect.left + rect.width/2 - Physics.BALL_R;
+    var y = fromTeam === 'player' ? (rect.bottom - 10) : (rect.top - 10);
+    ball.style.left = x + 'px';
+    ball.style.top = y + 'px';
+  }
+
+  /* ============================================================================
+     GAMEPLAY PHYSICS SUBSYSTEM — v2
+     ----------------------------------------------------------------------------
+     The entire previous ball-flight / aiming / cup-collision implementation has
+     been deleted, not tuned. This is a from-scratch rewrite (archived copy of
+     the old code lives in ARCHIVED_legacy_physics_v1.js for reference only —
+     it is not loaded here). UI, menus, multiplayer, game modes, statistics,
+     animations, sound and visual effects are untouched; only the gameplay
+     mechanics underneath them changed.
+
+     Five components, each with exactly one job:
+
+       BeerPongPhysicsEngine  Pure ball-flight integration at a FIXED timestep
+                              (gravity, drag, Magnus side-spin, spin decay,
+                              rolling/sliding friction, table restitution).
+                              Never advances by render dt — always this.DT.
+
+       CupCollisionSystem     Real cup geometry as five distinct collider
+                              zones (outer wall, rim, opening, inner wall,
+                              floor), resolved with continuous (swept)
+                              collision so a fast, flat throw can never tunnel
+                              through a thin rim between two samples. Produces
+                              rim shots, lip-ins, lip-outs, rim rolls, soft
+                              drops and hard bounces as emergent outcomes of
+                              geometry + momentum — never a coin flip.
+
+       TrajectoryPredictor    Runs the exact same integrator + collision
+                              system the real throw will use, so the drawn
+                              prediction (path, bounce markers, rim marker,
+                              landing ring, target-cup highlight) IS the
+                              outcome, not an approximation of it.
+
+       AimController          Two-stage precision input: place a landing
+                              reticle over the target, then pull the ball
+                              backward — pull distance sets power, vertical
+                              pull sets arc, horizontal pull sets side-spin.
+
+       ThrowController        Plays the precomputed, deterministic sample
+                              array back at a fixed physics rate (decoupled
+                              from render FPS — rAF only decides WHEN we
+                              sample the already-resolved path, it never
+                              re-simulates or varies physics with frame rate)
+                              and resolves scoring.
+
+     Nothing in this module calls Math.random() for ball flight. Identical
+     crosshair + identical pull ALWAYS reproduces the identical flight, every
+     bounce, every rim graze, every settle — down to the pixel. The AI's
+     *aim* uses randomness (that's opponent skill, not physics), but once its
+     target point is chosen, the same deterministic engine resolves it.
+     ============================================================================ */
+
+  
+
+  
+  
+
+
+  
+
+  
+
+  
+
+  /* ---- Module wiring: instantiate the five components once, then expose
+     the small set of entry points the rest of the app already calls
+     (resetBallPosition, sizeAimSvg, resetAimHud) plus the throw/trick
+     buttons, so nothing outside this block needs to change. ---- */
+  var Physics = new BeerPongPhysicsEngine();
+  var Predictor = new TrajectoryPredictor(Physics);
+  var Thrower = new ThrowController(Physics, Predictor);
+  var Aim = new AimController(Physics, Predictor);
+
+  function sizeAimSvg(){ Aim.resizeSvg(); }
+  window.addEventListener('resize', sizeAimSvg);
+
+  function resetAimHud(){ Aim.reset(); }
+
+  $('btn-throw').addEventListener('click', function(){
+    var m = state.match;
+    if(!m || !m.active) return;
+    toast(Aim.phase === 'target' ? 'DRAG TO PLACE YOUR CROSSHAIR TARGET' : 'PULL BACK & RELEASE TO THROW');
+    SFX.click();
+  });
+
+  function updateTrickButtonArmedUI(on){
+    $('btn-trick-shot').classList.toggle('trick-armed', !!on);
+  }
+
+  $('btn-trick-shot').addEventListener('click', function(){
+    var m = state.match;
+    if(!m || !m.active || m.paused || m.autoPaused || m.busy || m.turn !== 'player') return;
+    if(m.trickMeter < 100){ toast('TRICK METER CHARGING'); SFX.miss(); return; }
+    m.trickArmed = !m.trickArmed;
+    updateTrickButtonArmedUI(m.trickArmed);
+    toast(m.trickArmed ? 'TRICK SHOT ARMED — PULL BACK & RELEASE' : 'TRICK SHOT DISARMED');
+    SFX.click();
+  });
+

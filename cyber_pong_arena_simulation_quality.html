@@ -1,0 +1,2558 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+<title>CYBER-PONG ARENA | NEON OVERDRIVE</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=Rajdhani:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+  tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        colors: {
+          primary: "#00f3ff",
+          "primary-dim": "#00c4cc",
+          secondary: "#7000ff",
+          "secondary-light": "#bd93f9",
+          magenta: "#ff2e78",
+          gold: "#ffc233",
+          ink: "#e6f7f8",
+          "ink-dim": "#8aa0a2",
+          surface: "#000000",
+          s1: "#08090a",
+          s2: "#0e1112",
+          s3: "#171b1c",
+          outline: "#243133"
+        },
+        fontFamily: {
+          display: ["Orbitron", "sans-serif"],
+          body: ["Rajdhani", "sans-serif"],
+          mono: ['"Space Grotesk"', "monospace"]
+        },
+        boxShadow: {
+          "glow-cyan": "0 0 20px rgba(0,243,255,0.45)",
+          "glow-purple": "0 0 20px rgba(112,0,255,0.45)"
+        }
+      }
+    }
+  };
+</script>
+<style>
+  :root{
+    --c-player:#00f3ff;
+    --c-ai:#bd93f9;
+    --ball-color:#00f3ff;
+  }
+  *{ -webkit-tap-highlight-color: transparent; }
+  html,body{ height:100%; background:#000; overscroll-behavior:none; }
+  body{
+    font-family:'Rajdhani',sans-serif;
+    color:#e6f7f8;
+    min-height: max(884px, 100dvh);
+    overflow:hidden;
+    user-select:none;
+  }
+  .font-display{ font-family:'Orbitron',sans-serif; }
+  .font-mono{ font-family:'Space Grotesk',monospace; }
+  .italic-techno{ font-style:italic; transform:skewX(-6deg); display:inline-block; }
+  .material-symbols-outlined{ font-variation-settings:'FILL' 0,'wght' 500,'GRAD' 0,'opsz' 24; }
+  .fill-icon{ font-variation-settings:'FILL' 1,'wght' 500,'GRAD' 0,'opsz' 24 !important; }
+
+  /* ---------- Shell ---------- */
+  #app{
+    position:relative;
+    max-width:480px;
+    margin:0 auto;
+    height:100dvh;
+    min-height:600px;
+    background:#000;
+    overflow:hidden;
+    box-shadow:0 0 0 1px rgba(0,243,255,0.08), 0 0 90px rgba(0,243,255,0.06);
+  }
+  @media (min-width:481px){
+    body{ display:flex; align-items:center; justify-content:center; background:#050505; }
+    #app{ border-radius:28px; height:min(884px,96dvh); border:1px solid rgba(0,243,255,0.15); }
+  }
+
+  .carbon-texture{
+    background-image:
+      linear-gradient(rgba(0,243,255,0.045) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,243,255,0.045) 1px, transparent 1px);
+    background-size:22px 22px;
+  }
+
+  /* ambient particle field (lightweight CSS substitute for heavier WebGL fx) */
+  .particle-field{ position:absolute; inset:0; overflow:hidden; pointer-events:none; }
+  .particle{
+    position:absolute; border-radius:50%;
+    background:radial-gradient(circle, rgba(0,243,255,0.9) 0%, rgba(0,243,255,0) 70%);
+    animation: drift linear infinite;
+    opacity:0.5;
+  }
+  @keyframes drift{
+    0%{ transform:translateY(0) translateX(0); }
+    100%{ transform:translateY(-140px) translateX(20px); }
+  }
+
+  @keyframes scanning{
+    0%{ transform:translateY(-100%); opacity:0; }
+    50%{ opacity:0.35; }
+    100%{ transform:translateY(100%); opacity:0; }
+  }
+  .scan-line{ position:relative; overflow:hidden; }
+  .scan-line::after{
+    content:""; position:absolute; top:0; left:0; width:100%; height:2px;
+    background:linear-gradient(90deg, transparent, #00f3ff, transparent);
+    animation:scanning 3s linear infinite; pointer-events:none;
+  }
+
+  .glass-panel{
+    backdrop-filter:blur(22px); -webkit-backdrop-filter:blur(22px);
+    background:rgba(0,0,0,0.82);
+    border:1px solid rgba(0,243,255,0.25);
+    box-shadow:inset 0 0 12px rgba(0,243,255,0.08), 0 0 18px rgba(112,0,255,0.15);
+  }
+
+  .neon-text{ text-shadow:0 0 10px rgba(0,243,255,0.7), 0 0 22px rgba(112,0,255,0.4); }
+
+  .chamfer{ clip-path: polygon(7% 0, 100% 0, 100% 78%, 93% 100%, 0 100%, 0 22%); }
+  .chamfer-btn{ clip-path: polygon(10% 0, 100% 0, 90% 100%, 0 100%); }
+
+  @keyframes overdrive-pulse{
+    0%,100%{ box-shadow:0 0 15px rgba(0,243,255,0.4), 0 0 30px rgba(112,0,255,0.2); }
+    50%{ box-shadow:0 0 32px rgba(0,243,255,0.85), 0 0 55px rgba(112,0,255,0.55); }
+  }
+  .overdrive-glow{ animation:overdrive-pulse 1.6s infinite ease-in-out; }
+
+  /* ---------- Screens ---------- */
+  .screen{
+    position:absolute; inset:0; display:none; flex-direction:column;
+    opacity:0; transition:opacity .28s ease;
+  }
+  .screen.active{ display:flex; opacity:1; }
+
+  /* ---------- Panels / overlays ---------- */
+  .overlay-backdrop{
+    position:absolute; inset:0; background:rgba(0,0,0,0.72);
+    backdrop-filter:blur(2px); opacity:0; pointer-events:none; transition:opacity .25s ease;
+    z-index:70;
+  }
+  .overlay-backdrop.open{ opacity:1; pointer-events:auto; }
+
+  .sheet{
+    position:absolute; left:0; right:0; bottom:0; max-height:82%;
+    background:rgba(6,8,9,0.97); border-top:1px solid rgba(0,243,255,0.35);
+    border-radius:22px 22px 0 0; transform:translateY(100%);
+    transition:transform .32s cubic-bezier(.2,.8,.2,1);
+    z-index:75; display:flex; flex-direction:column; overflow:hidden;
+    box-shadow:0 -10px 40px rgba(0,243,255,0.15);
+  }
+  .sheet.open{ transform:translateY(0); }
+
+  .drawer-left{
+    position:absolute; top:0; left:0; height:100%; width:78%; max-width:300px;
+    background:rgba(0,0,0,0.96); border-right:1px solid rgba(0,243,255,0.3);
+    transform:translateX(-100%); transition:transform .32s cubic-bezier(.2,.8,.2,1);
+    z-index:80; overflow-y:auto;
+  }
+  .drawer-left.open{ transform:translateX(0); }
+
+  .modal-center{
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    z-index:90; opacity:0; pointer-events:none; transition:opacity .25s ease;
+  }
+  .modal-center.open{ opacity:1; pointer-events:auto; }
+  .modal-card{
+    transform:scale(0.9); transition:transform .3s cubic-bezier(.2,.8,.2,1);
+  }
+  .modal-center.open .modal-card{ transform:scale(1); }
+
+  ::-webkit-scrollbar{ width:5px; }
+  ::-webkit-scrollbar-thumb{ background:rgba(0,243,255,0.35); border-radius:4px; }
+
+  /* ---------- Bottom dock ---------- */
+  .dock-btn{ transition:all .2s ease; }
+  .dock-btn.is-active{ color:#00f3ff; transform:scale(1.08); filter:drop-shadow(0 0 8px #00f3ff); }
+
+  /* ---------- 3D Perspective Table ---------- */
+  #table-perspective{ perspective:1500px; -webkit-perspective:1500px; }
+  #table-surface{
+    position:relative; margin:0 auto; overflow:hidden; border-radius:26px;
+    transform:rotateX(44deg); transform-origin:center bottom; transform-style:preserve-3d;
+    box-shadow:0 40px 80px rgba(0,0,0,0.8);
+  }
+  .table-plate{
+    background:
+      radial-gradient(ellipse at 50% 15%, rgba(112,0,255,0.14), transparent 55%),
+      radial-gradient(ellipse at 50% 100%, rgba(0,243,255,0.14), transparent 55%),
+      linear-gradient(180deg,#0c0f10 0%, #060707 55%, #000 100%);
+    border:1px solid rgba(0,243,255,0.28);
+    box-shadow:inset 0 0 70px rgba(0,243,255,0.08), inset 0 0 140px rgba(0,0,0,0.9);
+  }
+  .tactical-grid{
+    background-image:
+      linear-gradient(rgba(0,243,255,0.14) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,243,255,0.14) 1px, transparent 1px);
+    background-size:26px 26px;
+    -webkit-mask-image:radial-gradient(ellipse at center, black 55%, transparent 100%);
+    mask-image:radial-gradient(ellipse at center, black 55%, transparent 100%);
+    opacity:0.6;
+  }
+  .table-sheen{
+    background:linear-gradient(180deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.02) 16%, transparent 42%, rgba(0,0,0,0.4) 100%);
+    mix-blend-mode:screen;
+  }
+  .table-vignette{ box-shadow:inset 0 0 100px rgba(0,0,0,0.9); }
+  .table-rail{ position:absolute; top:0; bottom:0; width:5px; z-index:2; }
+  .table-rail-left{ left:0; background:linear-gradient(180deg, var(--c-ai), var(--c-player)); box-shadow:0 0 16px var(--c-player), 0 0 24px var(--c-ai); }
+  .table-rail-right{ right:0; background:linear-gradient(180deg, var(--c-ai), var(--c-player)); box-shadow:0 0 16px var(--c-player), 0 0 24px var(--c-ai); }
+  .rail-energy{ position:absolute; top:0; bottom:0; width:2px; z-index:3; background:linear-gradient(180deg, transparent, rgba(255,255,255,0.95), transparent); background-size:100% 220%; opacity:0.85; animation:energy-flow-v 2.6s linear infinite; }
+  .rail-energy-left{ left:0; }
+  .rail-energy-right{ right:0; animation-delay:1.3s; }
+  @keyframes energy-flow-v{ 0%{ background-position:0 220%; } 100%{ background-position:0 -220%; } }
+
+  .table-hologram{ font-size:150px; color:var(--c-player); opacity:0.07; animation:holo-pulse 4s ease-in-out infinite; }
+  @keyframes holo-pulse{ 0%,100%{ opacity:0.05; transform:scale(1); } 50%{ opacity:0.13; transform:scale(1.05); } }
+  .hologram-ring{ position:absolute; top:50%; left:50%; width:160px; height:160px; margin:-80px 0 0 -80px; border-radius:9999px; border:1px dashed rgba(0,243,255,0.25); animation:table-spin 14s linear infinite; }
+  @keyframes table-spin{ to{ transform:rotate(360deg); } }
+
+  .throw-lane{
+    position:absolute; left:50%; top:12%; bottom:12%; width:84px; transform:translateX(-50%); z-index:1;
+    background:linear-gradient(180deg, rgba(0,243,255,0.18), rgba(0,243,255,0.02) 55%, rgba(0,243,255,0.18));
+    border-left:1px solid rgba(0,243,255,0.18); border-right:1px solid rgba(0,243,255,0.18);
+  }
+  .throw-lane-beam{
+    position:absolute; left:50%; top:0; bottom:0; width:2px; transform:translateX(-50%);
+    background:repeating-linear-gradient(180deg, rgba(0,243,255,0.9) 0 8px, transparent 8px 18px);
+    filter:drop-shadow(0 0 6px #00f3ff); animation:beam-move 1s linear infinite;
+  }
+  @keyframes beam-move{ 0%{ background-position-y:0; } 100%{ background-position-y:26px; } }
+  .throw-reticle{
+    position:absolute; top:50%; left:50%; width:60px; height:60px; margin:-30px 0 0 -30px;
+    border:2px dashed rgba(0,243,255,0.55); border-radius:9999px;
+    display:flex; align-items:center; justify-content:center; animation:table-spin 8s linear infinite;
+  }
+  .throw-reticle-dot{ width:8px; height:8px; border-radius:9999px; background:#fff; box-shadow:0 0 10px #00f3ff, 0 0 20px #00f3ff; }
+
+  /* ---------- Cups ---------- */
+  .cup-formation{ position:absolute; left:50%; transform:translateX(-50%); display:flex; flex-direction:column; align-items:center; gap:13px; z-index:15; }
+  .cup-formation-ai{ top:5%; }
+  .cup-formation-player{ bottom:5%; }
+  .cup-row{ display:flex; gap:13px; justify-content:center; }
+  .cup{
+    width:50px; height:50px; border-radius:9999px; position:relative;
+    border-width:3px; border-style:solid; display:flex; align-items:center; justify-content:center;
+    transition:transform .35s cubic-bezier(.3,-0.2,.6,1), opacity .35s ease, filter .35s ease;
+  }
+  .cup-player{ border-color:var(--c-player); color:var(--c-player); background:radial-gradient(circle at 35% 28%, rgba(0,243,255,0.32), rgba(0,243,255,0.08) 70%); box-shadow:0 0 18px rgba(0,243,255,0.5), inset 0 0 12px rgba(0,243,255,0.35); }
+  .cup-ai{ border-color:var(--c-ai); color:var(--c-ai); background:radial-gradient(circle at 35% 28%, rgba(189,147,249,0.32), rgba(112,0,255,0.10) 70%); box-shadow:0 0 18px rgba(112,0,255,0.5), inset 0 0 12px rgba(112,0,255,0.35); }
+  .cup-inner{ width:58%; height:58%; border-radius:9999px; border:1px solid currentColor; opacity:0.55; box-shadow:inset 0 0 8px currentColor; }
+  .cup.hit{ transform:scale(0) rotate(35deg); opacity:0; filter:brightness(3); pointer-events:none; }
+  @keyframes cup-idle{ 0%,100%{ transform:translateY(0); } 50%{ transform:translateY(-3px); } }
+  .cup:not(.hit){ animation:cup-idle 3.2s ease-in-out infinite; }
+  /* reticle corner decorations, drawn with layered gradients so no extra markup is needed */
+  .cup::before, .cup::after{ content:""; position:absolute; inset:-7px; pointer-events:none; opacity:0.85; }
+  .cup::before{
+    background:
+      linear-gradient(currentColor,currentColor) top left / 12px 2px no-repeat,
+      linear-gradient(currentColor,currentColor) top left / 2px 12px no-repeat,
+      linear-gradient(currentColor,currentColor) bottom right / 12px 2px no-repeat,
+      linear-gradient(currentColor,currentColor) bottom right / 2px 12px no-repeat;
+  }
+  .cup::after{
+    background:
+      linear-gradient(currentColor,currentColor) top right / 12px 2px no-repeat,
+      linear-gradient(currentColor,currentColor) top right / 2px 12px no-repeat,
+      linear-gradient(currentColor,currentColor) bottom left / 12px 2px no-repeat,
+      linear-gradient(currentColor,currentColor) bottom left / 2px 12px no-repeat;
+  }
+
+  /* ---------- Ball ---------- */
+  #ball{
+    position:fixed; width:26px; height:26px; border-radius:9999px;
+    background:radial-gradient(circle at 32% 28%, #ffffff, var(--ball-color) 55%, rgba(0,0,0,0.4) 100%);
+    box-shadow:0 0 16px var(--ball-color), 0 0 32px var(--ball-color), 0 2px 4px rgba(0,0,0,0.6);
+    left:0; top:0; z-index:45; pointer-events:none;
+  }
+  #ball::after{
+    content:""; position:absolute; left:50%; bottom:-9px; width:22px; height:7px;
+    transform:translateX(-50%) scaleY(0.55); border-radius:9999px;
+    background:radial-gradient(ellipse, rgba(0,0,0,0.55), rgba(0,0,0,0) 70%);
+    filter:blur(1px);
+  }
+
+  /* ---------- Skill-Based Aiming System ---------- */
+  .aim-layer{ position:absolute; inset:0; z-index:25; touch-action:none; cursor:crosshair; }
+  #aim-svg{ position:fixed; inset:0; width:100vw; height:100vh; z-index:40; pointer-events:none; }
+  .cup-target{ filter:brightness(1.9) saturate(1.3); }
+  .cup-target .cup-inner{ opacity:0.95; }
+  .cup-target::before, .cup-target::after{ opacity:1; animation:target-pulse 0.6s ease-in-out infinite; }
+  @keyframes target-pulse{ 0%,100%{ opacity:0.6; } 50%{ opacity:1; } }
+  .trick-armed{ outline:2px solid #ffd23f; box-shadow:0 0 8px #ffd23f, 0 0 20px #ffd23f; opacity:1 !important; }
+  .aim-hint{ position:absolute; left:50%; bottom:96px; transform:translateX(-50%); z-index:26; pointer-events:none; font-family:'Rajdhani',sans-serif; font-size:11px; letter-spacing:0.14em; text-transform:uppercase; color:rgba(0,243,255,0.55); text-shadow:0 0 8px rgba(0,243,255,0.4); transition:opacity .25s ease; }
+
+  /* ---------- Power meter ---------- */
+  .power-track{
+    width:16px; height:180px; background:#000; border:2px solid rgba(0,243,255,0.35);
+    border-radius:9999px; padding:3px; display:flex; flex-direction:column; justify-content:flex-end;
+    overflow:hidden; box-shadow:0 0 20px rgba(0,0,0,0.9);
+  }
+  .power-fill{
+    width:100%; border-radius:9999px;
+    background:linear-gradient(to top, #7000ff, #00f3ff, #ffffff);
+    transition:height .08s linear;
+  }
+
+  /* ---------- Trick meter segments ---------- */
+  .segmented{ display:flex; flex-direction:column-reverse; gap:3px; height:110px; width:8px; }
+  .segmented div{ flex:1; background:rgba(0,243,255,0.15); border-radius:2px; transition:background .2s ease, box-shadow .2s ease; }
+  .segmented div.lit{ background:#00f3ff; box-shadow:0 0 8px #00f3ff; }
+
+  .hud-btn{
+    background:linear-gradient(135deg,#171b1c 0%,#000 100%);
+    border:1px solid rgba(0,243,255,0.3); position:relative; overflow:hidden;
+  }
+  .hud-btn:active{ transform:scale(0.93); }
+
+  @keyframes pulse-btn{
+    0%,100%{ transform:scale(1); opacity:1; }
+    50%{ transform:scale(1.05); opacity:0.85; }
+  }
+  .trick-ready{ animation:pulse-btn 1.1s infinite ease-in-out; box-shadow:0 0 25px rgba(0,243,255,0.8); }
+
+  /* ---------- Toast ---------- */
+  #toast-stack{ position:absolute; top:76px; left:0; right:0; z-index:95; display:flex; flex-direction:column; align-items:center; gap:6px; pointer-events:none; }
+  .toast{
+    font-family:'Space Grotesk',monospace; font-size:11px; letter-spacing:0.08em;
+    padding:8px 16px; border-radius:9999px; background:rgba(0,0,0,0.85);
+    border:1px solid rgba(0,243,255,0.4); color:#00f3ff; text-transform:uppercase;
+    opacity:0; transform:translateY(-8px); transition:all .3s ease; box-shadow:0 0 14px rgba(0,243,255,0.3);
+  }
+  .toast.show{ opacity:1; transform:translateY(0); }
+
+  /* ---------- Misc ---------- */
+  .status-blink{ animation:blink 1s steps(2) infinite; }
+  @keyframes blink{ 0%,100%{ opacity:1; } 50%{ opacity:0.25; } }
+
+  input[type="range"]{ -webkit-appearance:none; appearance:none; height:4px; border-radius:9999px; background:rgba(0,243,255,0.2); }
+  input[type="range"]::-webkit-slider-thumb{
+    -webkit-appearance:none; appearance:none; width:16px; height:16px; border-radius:9999px;
+    background:#00f3ff; box-shadow:0 0 10px #00f3ff; cursor:pointer; border:2px solid #000;
+  }
+
+  .seg-option{ transition:all .2s ease; }
+  .seg-option.active{ background:rgba(0,243,255,0.18); color:#00f3ff; box-shadow:inset 0 0 0 1px #00f3ff; }
+
+  .skin-swatch.selected{ box-shadow:0 0 0 2px #00f3ff, 0 0 16px rgba(0,243,255,0.6); }
+  .skin-swatch.locked{ opacity:0.4; filter:grayscale(1); }
+
+  /* ---------- Arena: Deep Space (skin toggle, no physics/markup changes) ---------- */
+  /* Purely a re-skin: redeclares --c-player/--c-ai (already consumed by
+     .table-rail/.table-hologram) and overrides the few hardcoded-rgba rules
+     (.cup-player/.cup-ai backgrounds, .table-plate) so the physics engine,
+     which only ever reads element geometry via getBoundingClientRect, is
+     completely unaffected — it has no idea which arena skin is active. */
+  #app.theme-space{ --c-player:#00dce6; --c-ai:#bd93f9; }
+  .theme-space .cup-player{
+    border-color:#00dce6; color:#00dce6;
+    background:radial-gradient(circle at 35% 28%, rgba(0,220,230,0.34), rgba(0,220,230,0.09) 70%);
+    box-shadow:0 0 18px rgba(0,220,230,0.55), inset 0 0 12px rgba(0,220,230,0.35);
+  }
+  .theme-space .cup-ai{
+    border-color:#bd93f9; color:#bd93f9;
+    background:radial-gradient(circle at 35% 28%, rgba(189,147,249,0.34), rgba(112,0,255,0.12) 70%);
+    box-shadow:0 0 18px rgba(112,0,255,0.55), inset 0 0 12px rgba(112,0,255,0.35);
+  }
+  .theme-space .table-plate{
+    background:
+      radial-gradient(1.5px 1.5px at 12% 18%, rgba(255,255,255,0.9), transparent 60%),
+      radial-gradient(1px 1px at 32% 62%, rgba(255,255,255,0.65), transparent 60%),
+      radial-gradient(1.8px 1.8px at 55% 30%, rgba(0,220,230,0.95), transparent 60%),
+      radial-gradient(1px 1px at 70% 78%, rgba(255,255,255,0.55), transparent 60%),
+      radial-gradient(1.6px 1.6px at 85% 22%, rgba(189,147,249,0.9), transparent 60%),
+      radial-gradient(1px 1px at 92% 55%, rgba(255,255,255,0.6), transparent 60%),
+      radial-gradient(1.4px 1.4px at 22% 88%, rgba(0,220,230,0.8), transparent 60%),
+      radial-gradient(ellipse at 50% 15%, rgba(112,0,255,0.18), transparent 55%),
+      radial-gradient(ellipse at 50% 100%, rgba(0,220,230,0.18), transparent 55%),
+      linear-gradient(180deg,#050310 0%, #02010a 55%, #000 100%);
+    background-repeat:no-repeat;
+  }
+  .theme-space .tactical-grid{ opacity:0.3; }
+  .theme-space .throw-lane{
+    background:linear-gradient(180deg, rgba(0,220,230,0.18), rgba(0,220,230,0.02) 55%, rgba(0,220,230,0.18));
+    border-left-color:rgba(0,220,230,0.18); border-right-color:rgba(0,220,230,0.18);
+  }
+  .theme-space .throw-lane-beam{ background:repeating-linear-gradient(180deg, rgba(0,220,230,0.9) 0 8px, transparent 8px 18px); filter:drop-shadow(0 0 6px #00dce6); }
+  .theme-space .throw-reticle{ border-color:rgba(0,220,230,0.55); }
+  .theme-space .hologram-ring{ border-color:rgba(0,220,230,0.25); }
+  .arena-swatch.selected{ box-shadow:0 0 0 2px #00f3ff, 0 0 16px rgba(0,243,255,0.6); }
+
+  /* ---------- STAGE 1: Precision crosshair ---------- */
+  .aim-crosshair{
+    position:fixed; left:0; top:0; width:64px; height:64px; margin:-32px 0 0 -32px;
+    z-index:42; pointer-events:none; opacity:0; transition:opacity .15s ease;
+  }
+  .aim-crosshair.show{ opacity:1; }
+  .aim-crosshair.locked .crosshair-ring{ border-color:#39ff8c; box-shadow:0 0 14px rgba(57,255,140,0.7); }
+  .aim-crosshair.locked .crosshair-dot{ background:#39ff8c; box-shadow:0 0 10px #39ff8c; }
+  .crosshair-ring{
+    position:absolute; inset:6px; border-radius:9999px; border:2px solid #ff2ec4;
+    box-shadow:0 0 14px rgba(255,46,196,0.7); animation:crosshair-spin 3s linear infinite;
+  }
+  @keyframes crosshair-spin{ to{ transform:rotate(360deg); } }
+  .crosshair-dot{ position:absolute; left:50%; top:50%; width:6px; height:6px; margin:-3px 0 0 -3px; border-radius:9999px; background:#ff2ec4; box-shadow:0 0 10px #ff2ec4; }
+  .crosshair-tick{ position:absolute; background:currentColor; color:#ff2ec4; opacity:0.9; }
+  .tick-n{ left:50%; top:-4px; width:2px; height:12px; margin-left:-1px; background:#ff2ec4; }
+  .tick-s{ left:50%; bottom:-4px; width:2px; height:12px; margin-left:-1px; background:#ff2ec4; }
+  .tick-e{ top:50%; right:-4px; width:12px; height:2px; margin-top:-1px; background:#ff2ec4; }
+  .tick-w{ top:50%; left:-4px; width:12px; height:2px; margin-top:-1px; background:#ff2ec4; }
+  .aim-crosshair.locked .tick-n, .aim-crosshair.locked .tick-s, .aim-crosshair.locked .tick-e, .aim-crosshair.locked .tick-w{ background:#39ff8c; }
+
+  /* ---------- STAGE 2: Live shot-quality readout ---------- */
+  .aim-stats-hud{
+    position:absolute; left:50%; bottom:120px; transform:translateX(-50%) translateY(8px);
+    width:200px; z-index:31; display:flex; flex-direction:column; gap:6px;
+    padding:10px 12px; border-radius:10px; opacity:0; pointer-events:none;
+    background:rgba(6,8,10,0.72); backdrop-filter:blur(10px);
+    border:1px solid rgba(0,243,255,0.25); box-shadow:0 0 20px rgba(0,0,0,0.5);
+    transition:opacity .15s ease, transform .15s ease;
+  }
+  .aim-stats-hud.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+  .aim-stat-row{ display:flex; align-items:center; gap:8px; }
+  .aim-stat-label{ font-family:'Space Grotesk',monospace; font-size:9px; letter-spacing:0.12em; color:rgba(255,255,255,0.6); width:44px; flex-shrink:0; }
+  .aim-stat-track{ flex:1; height:5px; border-radius:9999px; background:rgba(255,255,255,0.08); overflow:hidden; position:relative; }
+  .aim-stat-fill{ position:absolute; top:0; bottom:0; left:0; width:0%; border-radius:9999px; transition:width .05s linear; }
+  .fill-cyan{ background:#00f3ff; box-shadow:0 0 8px #00f3ff; }
+  .fill-magenta{ background:#ff2ec4; box-shadow:0 0 8px #ff2ec4; left:50%; width:0%; }
+  .fill-green{ background:#39ff8c; box-shadow:0 0 8px #39ff8c; }
+  .spin-track{ position:relative; }
+  .spin-track::before{ content:""; position:absolute; left:50%; top:-2px; bottom:-2px; width:1px; background:rgba(255,255,255,0.35); }
+  .aim-release-readout{ text-align:center; font-family:'Orbitron',sans-serif; font-size:11px; letter-spacing:0.08em; color:#39ff8c; text-shadow:0 0 8px rgba(57,255,140,0.6); }
+
+  /* ---------- Deep Space theme: starfield + crystalline cup polish ---------- */
+  .theme-space .star-layer{ position:absolute; inset:0; pointer-events:none; z-index:0; }
+  .star-pt{ position:absolute; border-radius:9999px; background:#fff; animation:star-twinkle 3.4s ease-in-out infinite; }
+  @keyframes star-twinkle{ 0%,100%{ opacity:0.25; } 50%{ opacity:1; } }
+  .theme-space .cup-player, .theme-space .cup-ai{ backdrop-filter:blur(6px); }
+  .theme-space .cup-inner{ box-shadow:inset 0 0 10px currentColor, 0 0 6px currentColor; }
+</style>
+</head>
+<body>
+<div id="app" class="carbon-texture">
+
+  <!-- ============================================================ -->
+  <!-- BOOT SCREEN -->
+  <!-- ============================================================ -->
+  <div id="screen-boot" class="screen active items-center justify-center bg-black">
+    <div class="particle-field" id="boot-particles"></div>
+    <div class="relative z-10 flex flex-col items-center gap-6 px-10 text-center">
+      <span class="material-symbols-outlined text-primary text-5xl fill-icon neon-text">sports_esports</span>
+      <h1 class="font-display text-3xl italic-techno tracking-[0.15em] neon-text text-transparent bg-clip-text bg-gradient-to-r from-primary via-secondary-light to-primary">CYBER-PONG ARENA</h1>
+      <p class="font-mono text-[11px] text-ink-dim tracking-[0.3em] uppercase">Neon Overdrive Protocol</p>
+      <div class="w-56 h-1.5 bg-s3 rounded-full overflow-hidden border border-primary/20 mt-4">
+        <div id="boot-bar" class="h-full bg-gradient-to-r from-secondary via-primary to-primary" style="width:0%"></div>
+      </div>
+      <p id="boot-label" class="font-mono text-[10px] text-primary/70 tracking-[0.2em] uppercase">Initializing systems...</p>
+    </div>
+    <p class="absolute bottom-8 font-mono text-[10px] text-ink-dim/60 tracking-widest uppercase">tap to skip</p>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- MAIN MENU SCREEN -->
+  <!-- ============================================================ -->
+  <div id="screen-menu" class="screen bg-black">
+    <header class="fixed-header absolute top-0 left-0 w-full z-30 flex justify-between items-center px-4 h-16 bg-black/90 backdrop-blur-xl border-b border-primary/25">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-full border-2 border-primary shadow-glow-cyan flex items-center justify-center bg-s2">
+          <span class="material-symbols-outlined text-primary fill-icon text-lg">shield_person</span>
+        </div>
+        <h1 class="font-display text-lg italic-techno tracking-[0.1em] neon-text text-transparent bg-clip-text bg-gradient-to-r from-primary via-secondary-light to-primary">CYBER-PONG</h1>
+      </div>
+      <div class="flex items-center gap-2">
+        <button id="btn-open-log" class="w-9 h-9 flex items-center justify-center rounded-lg hover:bg-primary/10 text-primary/80 border border-primary/20 transition-all active:scale-90">
+          <span class="material-symbols-outlined text-lg">receipt_long</span>
+        </button>
+        <button id="btn-open-drawer" class="w-9 h-9 flex items-center justify-center rounded-lg hover:bg-primary/10 text-primary/80 border border-primary/20 transition-all active:scale-90">
+          <span class="material-symbols-outlined text-lg">settings</span>
+        </button>
+      </div>
+    </header>
+
+    <main class="relative w-full flex-1 flex flex-col items-center justify-center pt-16 pb-24 overflow-y-auto">
+      <div class="particle-field opacity-60"><div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[520px] h-[520px] bg-gradient-to-tr from-primary/10 via-secondary/15 to-transparent rounded-full blur-[120px]"></div></div>
+
+      <div class="relative z-10 w-full flex flex-col items-center px-5">
+        <div class="grid grid-cols-1 gap-4 w-full max-w-sm mb-6 mt-2">
+          <button id="btn-quick-match" class="group relative overdrive-glow overflow-hidden bg-primary text-black font-display text-xl italic-techno py-6 chamfer transition-all hover:brightness-110 active:scale-95 border-r-4 border-secondary">
+            <span class="relative z-10">QUICK MATCH</span>
+            <div class="absolute inset-0 bg-white/25 -translate-x-full group-hover:translate-x-full transition-transform duration-700 skew-x-12"></div>
+          </button>
+          <button id="btn-tournament" class="group relative overflow-hidden bg-s2 border border-secondary text-secondary-light font-display text-lg italic-techno py-5 chamfer transition-all hover:bg-secondary/20 active:scale-95 shadow-glow-purple">
+            <span class="relative z-10 uppercase">Tournament</span>
+            <div class="absolute bottom-0 left-0 w-full h-1 bg-secondary shadow-[0_0_15px_#7000ff]"></div>
+          </button>
+          <button id="btn-ranked" class="group relative overflow-hidden bg-s2 border border-magenta/50 text-magenta font-display text-lg italic-techno py-5 chamfer transition-all hover:border-magenta hover:bg-magenta/15 active:scale-95">
+            <span class="relative z-10 uppercase">Ranked Arena</span>
+            <div class="absolute top-0 right-0 w-1 h-full bg-magenta shadow-[0_0_15px_#ff2e78]"></div>
+          </button>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3 w-full max-w-sm">
+          <div class="glass-panel scan-line relative p-3 rounded-xl flex flex-col items-center border-l-4 border-primary">
+            <span class="font-mono text-[10px] text-primary/70 uppercase tracking-widest">Season Rank</span>
+            <span id="stat-rank" class="font-display text-primary text-base mt-1 italic-techno neon-text">ELITE IV</span>
+          </div>
+          <div class="glass-panel scan-line relative p-3 rounded-xl flex flex-col items-center border-l-4 border-secondary-light">
+            <span class="font-mono text-[10px] text-secondary-light/70 uppercase tracking-widest">Total Wins</span>
+            <span id="stat-wins" class="font-display text-secondary-light text-base mt-1 italic-techno">1,240</span>
+          </div>
+          <div class="glass-panel scan-line relative p-3 rounded-xl flex flex-col items-center border-l-4 border-white">
+            <span class="font-mono text-[10px] text-ink-dim uppercase tracking-widest">Win Rate</span>
+            <span id="stat-winrate" class="font-display text-ink text-base mt-1 italic-techno">68.4%</span>
+          </div>
+          <div class="glass-panel scan-line relative p-3 rounded-xl flex flex-col items-center border-l-4 border-magenta">
+            <span class="font-mono text-[10px] text-magenta/70 uppercase tracking-widest">Streak</span>
+            <span id="stat-streak" class="font-display text-magenta text-base mt-1 italic-techno">7W</span>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <nav class="absolute bottom-4 left-1/2 -translate-x-1/2 w-[92%] max-w-sm z-30">
+      <div class="glass-panel flex justify-around items-center h-[68px] px-2 rounded-2xl">
+        <button data-dock="arena" class="dock-btn is-active flex flex-col items-center justify-center text-white/50 flex-1 py-2">
+          <span class="material-symbols-outlined text-2xl fill-icon">sports_esports</span>
+          <span class="font-mono text-[9px] mt-0.5 tracking-wide">ARENA</span>
+        </button>
+        <button data-dock="tournament" class="dock-btn flex flex-col items-center justify-center text-white/50 flex-1 py-2">
+          <span class="material-symbols-outlined text-xl">emoji_events</span>
+          <span class="font-mono text-[9px] mt-0.5 tracking-wide">TOURNEY</span>
+        </button>
+        <button data-dock="lobby" class="dock-btn flex flex-col items-center justify-center text-white/50 flex-1 py-2">
+          <span class="material-symbols-outlined text-xl">groups</span>
+          <span class="font-mono text-[9px] mt-0.5 tracking-wide">LOBBY</span>
+        </button>
+        <button data-dock="loadout" class="dock-btn flex flex-col items-center justify-center text-white/50 flex-1 py-2">
+          <span class="material-symbols-outlined text-xl">style</span>
+          <span class="font-mono text-[9px] mt-0.5 tracking-wide">GEAR</span>
+        </button>
+        <button data-dock="profile" class="dock-btn flex flex-col items-center justify-center text-white/50 flex-1 py-2">
+          <span class="material-symbols-outlined text-xl">person</span>
+          <span class="font-mono text-[9px] mt-0.5 tracking-wide">PROFILE</span>
+        </button>
+      </div>
+    </nav>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- NAV DRAWER (from menu header settings icon) -->
+  <!-- ============================================================ -->
+  <div id="drawer-backdrop" class="overlay-backdrop"></div>
+  <aside id="nav-drawer" class="drawer-left pt-16 flex flex-col">
+    <div class="px-5 mb-8 flex flex-col">
+      <span class="font-display text-lg text-primary italic-techno mb-2">PILOT_ID</span>
+      <div class="flex items-center gap-3">
+        <div class="w-11 h-11 bg-primary/10 rounded-lg flex items-center justify-center border border-primary/40 shadow-glow-cyan">
+          <span class="material-symbols-outlined text-primary">person</span>
+        </div>
+        <div>
+          <p id="drawer-name" class="font-mono text-ink tracking-tight text-sm">COMMANDER_01</p>
+          <p id="drawer-rank" class="font-mono text-[10px] text-primary/70">LVL 99 | RANK #42</p>
+        </div>
+      </div>
+    </div>
+    <nav class="flex flex-col gap-1 px-2">
+      <button data-nav-target="none" class="nav-link flex items-center gap-4 px-4 py-3 text-primary font-bold bg-gradient-to-r from-primary/10 to-transparent border-l-4 border-primary rounded">
+        <span class="material-symbols-outlined">layers</span><span class="italic-techno text-sm">Tactical Overlay</span>
+      </button>
+      <button data-nav-target="panel-settings" class="nav-link flex items-center gap-4 px-4 py-3 text-ink-dim hover:text-primary hover:bg-primary/5 transition-all rounded">
+        <span class="material-symbols-outlined">settings_brightness</span><span class="italic-techno text-sm">Hologram Settings</span>
+      </button>
+      <button data-nav-target="panel-log" class="nav-link flex items-center gap-4 px-4 py-3 text-ink-dim hover:text-primary hover:bg-primary/5 transition-all rounded">
+        <span class="material-symbols-outlined">receipt_long</span><span class="italic-techno text-sm">Arena Log</span>
+      </button>
+      <button data-nav-target="panel-system" class="nav-link flex items-center gap-4 px-4 py-3 text-ink-dim hover:text-primary hover:bg-primary/5 transition-all rounded">
+        <span class="material-symbols-outlined">memory</span><span class="italic-techno text-sm">System Status</span>
+      </button>
+    </nav>
+  </aside>
+
+  <!-- ============================================================ -->
+  <!-- SHEET PANELS (shared overlay system) -->
+  <!-- ============================================================ -->
+  <div id="panel-backdrop" class="overlay-backdrop"></div>
+
+  <!-- SETTINGS -->
+  <section id="panel-settings" class="sheet">
+    <div class="flex items-center justify-between px-5 py-4 border-b border-primary/20">
+      <h2 class="font-display text-primary text-base italic-techno tracking-wide">HOLOGRAM SETTINGS</h2>
+      <button class="btn-close-panel w-8 h-8 flex items-center justify-center text-ink-dim hover:text-primary"><span class="material-symbols-outlined">close</span></button>
+    </div>
+    <div class="p-5 flex flex-col gap-6 overflow-y-auto">
+      <div class="flex items-center justify-between">
+        <div>
+          <p class="font-mono text-sm text-ink">Sound FX</p>
+          <p class="font-mono text-[10px] text-ink-dim">Tactical audio feedback</p>
+        </div>
+        <button id="toggle-sound" class="toggle-switch w-12 h-7 rounded-full bg-primary relative transition-all">
+          <span class="knob absolute top-0.5 left-0.5 w-6 h-6 bg-black rounded-full transition-all"></span>
+        </button>
+      </div>
+      <div class="flex items-center justify-between">
+        <div>
+          <p class="font-mono text-sm text-ink">Haptics</p>
+          <p class="font-mono text-[10px] text-ink-dim">Vibration on impact</p>
+        </div>
+        <button id="toggle-haptics" class="toggle-switch w-12 h-7 rounded-full bg-primary relative transition-all">
+          <span class="knob absolute top-0.5 left-0.5 w-6 h-6 bg-black rounded-full transition-all"></span>
+        </button>
+      </div>
+      <div>
+        <p class="font-mono text-sm text-ink mb-2">AI Difficulty</p>
+        <div id="difficulty-seg" class="grid grid-cols-3 gap-2 font-mono text-xs uppercase">
+          <button data-diff="easy" class="seg-option py-2 rounded border border-primary/25 text-ink-dim">Easy</button>
+          <button data-diff="normal" class="seg-option py-2 rounded border border-primary/25 text-ink-dim active">Normal</button>
+          <button data-diff="hard" class="seg-option py-2 rounded border border-primary/25 text-ink-dim">Hard</button>
+        </div>
+      </div>
+      <div>
+        <div class="flex justify-between mb-2">
+          <p class="font-mono text-sm text-ink">Throw Sensitivity</p>
+          <span id="sensitivity-value" class="font-mono text-sm text-primary">70</span>
+        </div>
+        <input id="sensitivity-slider" type="range" min="0" max="100" value="70" class="w-full"/>
+      </div>
+      <button id="btn-reset-stats" class="mt-2 py-3 rounded border border-magenta/40 text-magenta font-mono text-xs uppercase tracking-widest hover:bg-magenta/10 transition-all">Reset Pilot Stats</button>
+    </div>
+  </section>
+
+  <!-- ARENA LOG -->
+  <section id="panel-log" class="sheet">
+    <div class="flex items-center justify-between px-5 py-4 border-b border-primary/20">
+      <h2 class="font-display text-primary text-base italic-techno tracking-wide">ARENA LOG</h2>
+      <button class="btn-close-panel w-8 h-8 flex items-center justify-center text-ink-dim hover:text-primary"><span class="material-symbols-outlined">close</span></button>
+    </div>
+    <div id="log-list" class="p-5 flex flex-col gap-2 overflow-y-auto"></div>
+  </section>
+
+  <!-- SYSTEM STATUS -->
+  <section id="panel-system" class="sheet">
+    <div class="flex items-center justify-between px-5 py-4 border-b border-primary/20">
+      <h2 class="font-display text-primary text-base italic-techno tracking-wide">SYSTEM STATUS</h2>
+      <button class="btn-close-panel w-8 h-8 flex items-center justify-center text-ink-dim hover:text-primary"><span class="material-symbols-outlined">close</span></button>
+    </div>
+    <div class="p-5 flex flex-col gap-3 overflow-y-auto font-mono text-xs">
+      <div class="flex justify-between border-b border-primary/10 pb-2"><span class="text-ink-dim">NETWORK PING</span><span id="sys-ping" class="text-primary">14ms</span></div>
+      <div class="flex justify-between border-b border-primary/10 pb-2"><span class="text-ink-dim">FRAME RATE</span><span id="sys-fps" class="text-primary">60fps</span></div>
+      <div class="flex justify-between border-b border-primary/10 pb-2"><span class="text-ink-dim">SERVER NODE</span><span id="sys-node" class="text-primary">NEO-TOKYO-3</span></div>
+      <div class="flex justify-between border-b border-primary/10 pb-2"><span class="text-ink-dim">BUILD VERSION</span><span class="text-primary">2.7.1-overdrive</span></div>
+      <div class="flex justify-between border-b border-primary/10 pb-2"><span class="text-ink-dim">DEVICE SYNC</span><span id="sys-sync" class="text-primary">98%</span></div>
+      <button id="btn-run-diagnostics" class="mt-3 py-3 rounded chamfer-btn bg-primary/10 border border-primary/40 text-primary uppercase tracking-widest hover:bg-primary/20 transition-all">Run Diagnostics</button>
+    </div>
+  </section>
+
+  <!-- TOURNAMENT -->
+  <section id="panel-tournament" class="sheet">
+    <div class="flex items-center justify-between px-5 py-4 border-b border-primary/20">
+      <h2 class="font-display text-secondary-light text-base italic-techno tracking-wide">TOURNAMENT BRACKET</h2>
+      <button class="btn-close-panel w-8 h-8 flex items-center justify-center text-ink-dim hover:text-primary"><span class="material-symbols-outlined">close</span></button>
+    </div>
+    <div class="p-5 flex flex-col gap-3 overflow-y-auto">
+      <p class="font-mono text-[11px] text-ink-dim">QUARTERFINAL &mdash; NEON CUP S4</p>
+      <div id="bracket-list" class="flex flex-col gap-2"></div>
+      <button id="btn-enter-bracket" class="mt-3 py-4 chamfer bg-secondary text-white font-display italic-techno tracking-wide active:scale-95 transition-all shadow-glow-purple">ENTER BRACKET</button>
+    </div>
+  </section>
+
+  <!-- LOBBY -->
+  <section id="panel-lobby" class="sheet">
+    <div class="flex items-center justify-between px-5 py-4 border-b border-primary/20">
+      <h2 class="font-display text-primary text-base italic-techno tracking-wide">MATCHMAKING LOBBY</h2>
+      <button class="btn-close-panel w-8 h-8 flex items-center justify-center text-ink-dim hover:text-primary"><span class="material-symbols-outlined">close</span></button>
+    </div>
+    <div id="lobby-list" class="p-5 flex flex-col gap-3 overflow-y-auto"></div>
+  </section>
+
+  <!-- LOADOUT / GEAR -->
+  <section id="panel-loadout" class="sheet">
+    <div class="flex items-center justify-between px-5 py-4 border-b border-primary/20">
+      <h2 class="font-display text-primary text-base italic-techno tracking-wide">LOADOUT / GEAR</h2>
+      <button class="btn-close-panel w-8 h-8 flex items-center justify-center text-ink-dim hover:text-primary"><span class="material-symbols-outlined">close</span></button>
+    </div>
+    <div class="p-5">
+      <p class="font-mono text-[11px] text-ink-dim mb-3 uppercase tracking-widest">Ball Skin</p>
+      <div id="skin-grid" class="grid grid-cols-4 gap-3"></div>
+    </div>
+    <div class="p-5 pt-0">
+      <p class="font-mono text-[11px] text-ink-dim mb-3 uppercase tracking-widest">Arena / Table</p>
+      <div id="arena-grid" class="grid grid-cols-2 gap-3"></div>
+    </div>
+  </section>
+
+  <!-- PROFILE -->
+  <section id="panel-profile" class="sheet">
+    <div class="flex items-center justify-between px-5 py-4 border-b border-primary/20">
+      <h2 class="font-display text-primary text-base italic-techno tracking-wide">PILOT PROFILE</h2>
+      <button class="btn-close-panel w-8 h-8 flex items-center justify-center text-ink-dim hover:text-primary"><span class="material-symbols-outlined">close</span></button>
+    </div>
+    <div class="p-5 flex flex-col gap-5 overflow-y-auto">
+      <div class="flex items-center gap-4">
+        <div class="w-16 h-16 rounded-xl bg-primary/10 border-2 border-primary flex items-center justify-center shadow-glow-cyan">
+          <span class="material-symbols-outlined text-primary text-3xl fill-icon">shield_person</span>
+        </div>
+        <div>
+          <p id="profile-name" class="font-display text-ink text-lg italic-techno">COMMANDER_01</p>
+          <p id="profile-rank" class="font-mono text-xs text-primary">LVL 99 | ELITE IV</p>
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div class="glass-panel p-3 rounded-lg flex flex-col items-center"><span class="font-mono text-[10px] text-ink-dim">WINS</span><span id="profile-wins" class="font-display text-primary text-lg">1,240</span></div>
+        <div class="glass-panel p-3 rounded-lg flex flex-col items-center"><span class="font-mono text-[10px] text-ink-dim">LOSSES</span><span id="profile-losses" class="font-display text-magenta text-lg">572</span></div>
+        <div class="glass-panel p-3 rounded-lg flex flex-col items-center"><span class="font-mono text-[10px] text-ink-dim">WIN RATE</span><span id="profile-winrate" class="font-display text-ink text-lg">68.4%</span></div>
+        <div class="glass-panel p-3 rounded-lg flex flex-col items-center"><span class="font-mono text-[10px] text-ink-dim">STREAK</span><span id="profile-streak" class="font-display text-secondary-light text-lg">7W</span></div>
+      </div>
+      <div>
+        <p class="font-mono text-[11px] text-ink-dim mb-2 uppercase tracking-widest">Badges</p>
+        <div class="flex gap-3">
+          <span class="material-symbols-outlined text-gold fill-icon text-3xl">military_tech</span>
+          <span class="material-symbols-outlined text-primary fill-icon text-3xl">bolt</span>
+          <span class="material-symbols-outlined text-secondary-light fill-icon text-3xl">local_fire_department</span>
+          <span class="material-symbols-outlined text-ink-dim/40 text-3xl">lock</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <!-- GAMEPLAY SCREEN -->
+  <!-- ============================================================ -->
+  <div id="screen-game" class="screen bg-black">
+    <div class="particle-field opacity-40" id="game-particles"></div>
+
+    <header class="absolute top-0 left-0 w-full z-30 flex justify-between items-center px-3 h-16 bg-black/90 backdrop-blur-2xl border-b border-primary/30">
+      <div class="flex items-center gap-2">
+        <div class="w-9 h-9 rounded-full border-2 border-primary/70 flex items-center justify-center glass-panel">
+          <span class="material-symbols-outlined text-primary fill-icon text-lg">shield_person</span>
+        </div>
+        <div class="flex flex-col leading-tight">
+          <span class="font-display text-[12px] text-primary italic-techno">COMMANDER_01</span>
+          <span id="game-accuracy" class="font-mono text-[9px] text-primary/70 tracking-widest uppercase">ACC: 88%</span>
+        </div>
+      </div>
+      <div class="flex flex-col items-center relative">
+        <div class="w-12 h-12 rounded-full glass-panel border-2 border-primary flex items-center justify-center">
+          <span id="game-timer" class="font-display text-base text-white italic">90</span>
+        </div>
+        <span id="game-score" class="font-mono text-[9px] text-primary/70 mt-0.5 tracking-widest">00 : 00</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <div class="flex flex-col leading-tight text-right">
+          <span class="font-display text-[12px] text-secondary-light italic-techno">CYBER_VOID</span>
+          <span id="game-ai-streak" class="font-mono text-[9px] text-secondary-light/70 tracking-widest uppercase">STREAK: X0</span>
+        </div>
+        <div class="w-9 h-9 rounded-full border-2 border-secondary-light/70 flex items-center justify-center glass-panel">
+          <span class="material-symbols-outlined text-secondary-light fill-icon text-lg">smart_toy</span>
+        </div>
+        <button id="btn-pause" class="w-8 h-8 flex items-center justify-center text-ink-dim hover:text-primary ml-1">
+          <span class="material-symbols-outlined">pause_circle</span>
+        </button>
+      </div>
+    </header>
+
+    <div id="toast-stack"></div>
+
+    <main class="relative flex-1 w-full overflow-hidden">
+      <div id="table-perspective" class="absolute inset-0 flex items-start justify-center pt-14 pb-24">
+        <div id="table-surface" class="w-[92%] h-full max-w-[440px]">
+          <div class="absolute inset-0 table-plate"></div>
+          <div id="star-layer" class="star-layer"></div>
+          <div class="absolute inset-0 carbon-texture"></div>
+          <div class="absolute inset-0 tactical-grid pointer-events-none"></div>
+          <div class="absolute inset-0 table-sheen pointer-events-none"></div>
+
+          <div class="table-rail table-rail-left"></div>
+          <div class="table-rail table-rail-right"></div>
+          <div class="rail-energy rail-energy-left"></div>
+          <div class="rail-energy rail-energy-right"></div>
+
+          <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none flex items-center justify-center">
+            <span class="material-symbols-outlined table-hologram">query_stats</span>
+            <div class="hologram-ring"></div>
+          </div>
+
+          <div class="throw-lane">
+            <div class="throw-lane-beam"></div>
+            <div class="throw-reticle"><div class="throw-reticle-dot"></div></div>
+          </div>
+
+          <div class="absolute top-1/2 left-1/2 -translate-x-1/2 w-[80%] h-px bg-gradient-to-r from-transparent via-primary/50 to-transparent pointer-events-none"></div>
+
+          <div id="ai-cups" class="cup-formation cup-formation-ai" data-lane="ai"></div>
+          <div id="player-cups" class="cup-formation cup-formation-player" data-lane="player"></div>
+
+          <div class="absolute inset-0 table-vignette pointer-events-none"></div>
+        </div>
+      </div>
+      <div id="aim-layer" class="aim-layer"></div>
+      <div id="aim-hint" class="aim-hint">Drag to place crosshair over target</div>
+
+      <!-- STAGE 1: Precision crosshair (landing target selection) -->
+      <div id="aim-crosshair" class="aim-crosshair">
+        <div class="crosshair-ring"></div>
+        <div class="crosshair-tick tick-n"></div>
+        <div class="crosshair-tick tick-s"></div>
+        <div class="crosshair-tick tick-e"></div>
+        <div class="crosshair-tick tick-w"></div>
+        <div class="crosshair-dot"></div>
+      </div>
+    </main>
+
+    <svg id="aim-svg" xmlns="http://www.w3.org/2000/svg"></svg>
+
+    <!-- STAGE 2: Live shot-quality readout (power / arc / spin / release) -->
+    <div id="aim-stats-hud" class="aim-stats-hud">
+      <div class="aim-stat-row">
+        <span class="aim-stat-label">ARC</span>
+        <div class="aim-stat-track"><div id="arc-fill" class="aim-stat-fill fill-cyan"></div></div>
+      </div>
+      <div class="aim-stat-row">
+        <span class="aim-stat-label">SPIN</span>
+        <div class="aim-stat-track spin-track"><div id="spin-fill" class="aim-stat-fill fill-magenta"></div></div>
+      </div>
+      <div class="aim-stat-row">
+        <span class="aim-stat-label">RELEASE</span>
+        <div class="aim-stat-track"><div id="release-fill" class="aim-stat-fill fill-green"></div></div>
+      </div>
+      <div id="release-readout" class="aim-release-readout">—</div>
+    </div>
+
+    <div id="ball"></div>
+
+    <!-- LEFT HUD: power meter -->
+    <div class="absolute left-3 top-1/2 -translate-y-1/2 z-30 flex flex-col items-center gap-3">
+      <div class="power-track"><div id="power-fill" class="power-fill" style="height:75%"></div></div>
+      <div class="glass-panel px-2 py-1.5 rounded-lg flex flex-col items-center min-w-[54px]">
+        <span class="font-mono text-[9px] text-primary/80">POWER</span>
+        <span id="power-readout" class="font-display text-sm text-white">75%</span>
+      </div>
+    </div>
+
+    <!-- RIGHT HUD: trick meter + adjustments -->
+    <div class="absolute right-3 top-1/2 -translate-y-1/2 z-30 flex flex-col items-center gap-4">
+      <div class="flex flex-col items-center gap-1">
+        <span class="font-mono text-[8px] text-primary/70">TRICK</span>
+        <div id="trick-segments" class="segmented"></div>
+      </div>
+      <button data-adjust="wind" class="hud-btn w-12 h-12 rounded-xl flex flex-col items-center justify-center gap-0.5 active:scale-90 transition-all">
+        <span class="material-symbols-outlined text-primary text-lg">air</span>
+        <span id="wind-value" class="font-mono text-[7px] text-primary/70">LOW</span>
+      </button>
+      <button data-adjust="spin" class="hud-btn w-12 h-12 rounded-xl flex flex-col items-center justify-center gap-0.5 active:scale-90 transition-all">
+        <span class="material-symbols-outlined text-primary text-lg">cyclone</span>
+        <span id="spin-value" class="font-mono text-[7px] text-primary/70">OFF</span>
+      </button>
+      <button data-adjust="sens" class="hud-btn w-12 h-12 rounded-xl flex flex-col items-center justify-center gap-0.5 active:scale-90 transition-all">
+        <span class="material-symbols-outlined text-primary text-lg">radar</span>
+        <span id="sens-value" class="font-mono text-[7px] text-primary/70">70</span>
+      </button>
+    </div>
+
+    <!-- BOTTOM ACTION BAR -->
+    <footer class="absolute bottom-0 left-0 w-full z-30 flex justify-between items-end px-4 pb-6 h-32 pointer-events-none">
+      <div class="flex gap-3 pointer-events-auto">
+        <button id="btn-quick-loadout" class="w-12 h-12 hud-btn rounded-xl flex items-center justify-center active:scale-90 transition-all">
+          <span class="material-symbols-outlined text-primary">style</span>
+        </button>
+        <button id="btn-quick-log" class="w-12 h-12 hud-btn rounded-xl flex items-center justify-center active:scale-90 transition-all">
+          <span class="material-symbols-outlined text-primary">history</span>
+        </button>
+      </div>
+
+      <div class="relative pointer-events-auto group mb-1 flex flex-col items-center gap-2">
+        <button id="btn-trick-shot" class="hud-btn w-14 h-14 rounded-full flex items-center justify-center opacity-60 transition-all">
+          <span class="material-symbols-outlined text-primary">magic_button</span>
+        </button>
+        <div class="relative">
+          <div class="absolute -inset-6 bg-primary/25 blur-2xl rounded-full overdrive-glow"></div>
+          <button id="btn-throw" class="relative w-44 h-16 bg-primary text-black font-display text-lg chamfer-btn active:scale-95 transition-all flex items-center justify-center gap-2 shadow-glow-cyan">
+            <span class="material-symbols-outlined font-black">bolt</span>
+            <span class="italic-techno font-black">THROW</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="flex gap-3 pointer-events-auto">
+        <button id="btn-quick-profile" class="w-12 h-12 hud-btn rounded-xl flex items-center justify-center active:scale-90 transition-all">
+          <span class="material-symbols-outlined text-primary">workspace_premium</span>
+        </button>
+        <button id="btn-open-settings-game" class="w-12 h-12 hud-btn rounded-xl flex items-center justify-center active:scale-90 transition-all">
+          <span class="material-symbols-outlined text-primary">tune</span>
+        </button>
+      </div>
+    </footer>
+
+    <div class="absolute inset-0 pointer-events-none shadow-[inset_0_0_140px_rgba(0,0,0,0.95)] z-20"></div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- PAUSE MENU -->
+  <!-- ============================================================ -->
+  <div id="modal-pause" class="modal-center">
+    <div class="modal-card glass-panel w-[82%] max-w-xs rounded-2xl p-6 flex flex-col items-center gap-4">
+      <span class="material-symbols-outlined text-primary text-4xl">pause_circle</span>
+      <h2 class="font-display text-primary text-xl italic-techno tracking-widest">PAUSED</h2>
+      <button id="btn-resume" class="w-full py-3 chamfer-btn bg-primary text-black font-display italic-techno tracking-wide active:scale-95 transition-all">RESUME</button>
+      <button id="btn-restart" class="w-full py-3 chamfer-btn bg-s2 border border-secondary text-secondary-light font-display italic-techno tracking-wide active:scale-95 transition-all">RESTART MATCH</button>
+      <button id="btn-pause-settings" class="w-full py-3 chamfer-btn bg-s2 border border-primary/40 text-primary font-display italic-techno tracking-wide active:scale-95 transition-all">SETTINGS</button>
+      <button id="btn-quit" class="w-full py-3 chamfer-btn bg-s2 border border-magenta/50 text-magenta font-display italic-techno tracking-wide active:scale-95 transition-all">QUIT TO MENU</button>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- GAME OVER MODAL -->
+  <!-- ============================================================ -->
+  <div id="modal-gameover" class="modal-center">
+    <div class="modal-card glass-panel w-[86%] max-w-xs rounded-2xl p-6 flex flex-col items-center gap-3 text-center">
+      <span id="go-icon" class="material-symbols-outlined text-5xl fill-icon">emoji_events</span>
+      <h2 id="go-title" class="font-display text-2xl italic-techno tracking-widest neon-text">VICTORY</h2>
+      <p id="go-subtitle" class="font-mono text-xs text-ink-dim uppercase tracking-widest">Arena Cleared</p>
+      <div class="w-full grid grid-cols-2 gap-3 my-2">
+        <div class="glass-panel p-3 rounded-lg"><p class="font-mono text-[9px] text-ink-dim">FINAL SCORE</p><p id="go-score" class="font-display text-primary text-lg">10 : 4</p></div>
+        <div class="glass-panel p-3 rounded-lg"><p class="font-mono text-[9px] text-ink-dim">XP GAINED</p><p id="go-xp" class="font-display text-gold text-lg">+240</p></div>
+      </div>
+      <button id="btn-rematch" class="w-full py-3 chamfer-btn bg-primary text-black font-display italic-techno tracking-wide active:scale-95 transition-all">REMATCH</button>
+      <button id="btn-gameover-menu" class="w-full py-3 chamfer-btn bg-s2 border border-primary/40 text-primary font-display italic-techno tracking-wide active:scale-95 transition-all">MAIN MENU</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ================= STATE ================= */
+  var state = {
+    screen: 'boot',
+    activePanel: null,
+    settings: { sound:true, haptics:true, difficulty:'normal', sensitivity:70 },
+    profile: { name:'COMMANDER_01', level:99, rank:'ELITE IV', wins:1240, losses:572, streak:7 },
+    loadout: { skin:'cyan', unlocked:['cyan','purple','magenta'], arena:'neon' },
+    matchHistory: [
+      { opp:'CYBER_VOID', result:'W', score:'10-6', mode:'RANKED' },
+      { opp:'GHOST_PROTOCOL', result:'W', score:'10-8', mode:'QUICK' },
+      { opp:'NULL_SECTOR', result:'L', score:'7-10', mode:'TOURNEY' },
+      { opp:'RAZOR_WIRE', result:'W', score:'10-3', mode:'QUICK' }
+    ],
+    match: null
+  };
+
+  var SKINS = [
+    { id:'cyan', name:'Cyan Surge', color:'#00f3ff', locked:false },
+    { id:'purple', name:'Violet Wraith', color:'#bd93f9', locked:false },
+    { id:'magenta', name:'Magenta Pulse', color:'#ff2e78', locked:false },
+    { id:'gold', name:'Gold Overdrive', color:'#ffc233', locked:true }
+  ];
+
+  var ARENAS = [
+    { id:'neon', name:'Neon Overdrive', color:'#00f3ff' },
+    { id:'space', name:'Deep Space', color:'#bd93f9' }
+  ];
+
+  var OPPONENTS = [
+    { name:'CYBER_VOID', rank:'ELITE IV', winrate:'71%' },
+    { name:'GHOST_PROTOCOL', rank:'ELITE II', winrate:'64%' },
+    { name:'NULL_SECTOR', rank:'DIAMOND I', winrate:'58%' },
+    { name:'RAZOR_WIRE', rank:'ELITE V', winrate:'77%' }
+  ];
+
+  /* ================= UTIL ================= */
+  function $(id){ return document.getElementById(id); }
+  function qsa(sel, ctx){ return Array.prototype.slice.call((ctx||document).querySelectorAll(sel)); }
+  function clamp(v,min,max){ return Math.max(min, Math.min(max, v)); }
+  function rand(min,max){ return Math.random()*(max-min)+min; }
+  function pick(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+
+  /* ================= SOUND ================= */
+  var audioCtx = null;
+  function ctx(){
+    if(!audioCtx){
+      try { audioCtx = new (window.AudioContext||window.webkitAudioContext)(); } catch(e){ audioCtx = null; }
+    }
+    return audioCtx;
+  }
+  function beep(freq, dur, type, gainVal){
+    if(!state.settings.sound) return;
+    var c = ctx();
+    if(!c) return;
+    if(c.state === 'suspended'){ c.resume(); }
+    var osc = c.createOscillator();
+    var gain = c.createGain();
+    osc.type = type || 'square';
+    osc.frequency.value = freq;
+    gain.gain.value = gainVal || 0.05;
+    osc.connect(gain);
+    gain.connect(c.destination);
+    osc.start();
+    gain.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + (dur||0.15));
+    osc.stop(c.currentTime + (dur||0.15) + 0.02);
+  }
+  var SFX = {
+    click: function(){ beep(880, 0.06, 'square', 0.03); },
+    hit: function(){ beep(1200, 0.18, 'sawtooth', 0.05); setTimeout(function(){ beep(1800,0.12,'sawtooth',0.04); }, 60); },
+    miss: function(){ beep(160, 0.25, 'sine', 0.05); },
+    trick: function(){ [660,880,1100,1400].forEach(function(f,i){ setTimeout(function(){ beep(f,0.15,'square',0.05); }, i*80); }); },
+    win: function(){ [523,659,784,1046].forEach(function(f,i){ setTimeout(function(){ beep(f,0.22,'triangle',0.06); }, i*130); }); },
+    lose: function(){ [400,330,260,200].forEach(function(f,i){ setTimeout(function(){ beep(f,0.25,'sawtooth',0.05); }, i*130); }); },
+    open: function(){ beep(500,0.08,'sine',0.03); },
+    close: function(){ beep(340,0.08,'sine',0.03); }
+  };
+  function haptic(ms){
+    if(state.settings.haptics && navigator.vibrate){ navigator.vibrate(ms||15); }
+  }
+
+  /* ================= TOAST ================= */
+  function toast(msg){
+    var stack = $('toast-stack');
+    if(!stack) return;
+    var el = document.createElement('div');
+    el.className = 'toast';
+    el.textContent = msg;
+    stack.appendChild(el);
+    requestAnimationFrame(function(){ el.classList.add('show'); });
+    setTimeout(function(){
+      el.classList.remove('show');
+      setTimeout(function(){ el.remove(); }, 300);
+    }, 1700);
+  }
+
+  /* ================= SCREEN NAV ================= */
+  function showScreen(id){
+    qsa('.screen').forEach(function(s){ s.classList.remove('active'); });
+    $(id).classList.add('active');
+    state.screen = id;
+  }
+
+  /* ================= PANEL / DRAWER / MODAL SYSTEM ================= */
+  function openPanel(id){
+    closeDrawer();
+    var panel = $(id);
+    if(!panel) return;
+    $('panel-backdrop').classList.add('open');
+    panel.classList.add('open');
+    state.activePanel = id;
+    if(state.match && state.match.active && !state.match.paused){
+      state.match.autoPaused = true;
+      pauseMatchTimer();
+    }
+    SFX.open();
+  }
+  function closePanel(){
+    if(state.activePanel){
+      $(state.activePanel).classList.remove('open');
+    }
+    $('panel-backdrop').classList.remove('open');
+    state.activePanel = null;
+    if(state.match && state.match.active && state.match.autoPaused){
+      state.match.autoPaused = false;
+      resumeMatchTimer();
+    }
+    SFX.close();
+  }
+  $('panel-backdrop').addEventListener('click', closePanel);
+  qsa('.btn-close-panel').forEach(function(btn){ btn.addEventListener('click', closePanel); });
+
+  function openDrawer(){
+    $('nav-drawer').classList.add('open');
+    $('drawer-backdrop').classList.add('open');
+    SFX.open();
+  }
+  function closeDrawer(){
+    $('nav-drawer').classList.remove('open');
+    $('drawer-backdrop').classList.remove('open');
+  }
+  $('btn-open-drawer').addEventListener('click', openDrawer);
+  $('drawer-backdrop').addEventListener('click', closeDrawer);
+  qsa('.nav-link').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      closeDrawer();
+      var target = btn.getAttribute('data-nav-target');
+      if(target && target !== 'none'){ openPanel(target); }
+    });
+  });
+  $('btn-open-log').addEventListener('click', function(){ openPanel('panel-log'); });
+
+  function openModal(id){ $(id).classList.add('open'); }
+  function closeModal(id){ $(id).classList.remove('open'); }
+
+  /* ================= DOCK NAV ================= */
+  qsa('[data-dock]').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      SFX.click();
+      qsa('[data-dock]').forEach(function(b){ b.classList.remove('is-active'); });
+      btn.classList.add('is-active');
+      var target = btn.getAttribute('data-dock');
+      if(target === 'arena'){ closePanel(); return; }
+      if(target === 'tournament'){ openPanel('panel-tournament'); }
+      if(target === 'lobby'){ openPanel('panel-lobby'); }
+      if(target === 'loadout'){ openPanel('panel-loadout'); }
+      if(target === 'profile'){ openPanel('panel-profile'); }
+    });
+  });
+
+  /* ================= MENU CTA BUTTONS ================= */
+  $('btn-quick-match').addEventListener('click', function(){ SFX.click(); startMatch('quick', 'CYBER_VOID'); });
+  $('btn-tournament').addEventListener('click', function(){ SFX.click(); openPanel('panel-tournament'); });
+  $('btn-ranked').addEventListener('click', function(){ SFX.click(); startMatch('ranked', 'CYBER_VOID'); });
+
+  /* ================= SETTINGS PANEL ================= */
+  function syncSettingsUI(){
+    var soundToggle = $('toggle-sound');
+    var hapticsToggle = $('toggle-haptics');
+    setToggle(soundToggle, state.settings.sound);
+    setToggle(hapticsToggle, state.settings.haptics);
+    qsa('#difficulty-seg [data-diff]').forEach(function(btn){
+      btn.classList.toggle('active', btn.getAttribute('data-diff') === state.settings.difficulty);
+    });
+    $('sensitivity-slider').value = state.settings.sensitivity;
+    $('sensitivity-value').textContent = state.settings.sensitivity;
+    $('sens-value') && ( $('sens-value').textContent = state.settings.sensitivity );
+  }
+  function setToggle(el, on){
+    el.classList.toggle('bg-primary', on);
+    el.classList.toggle('bg-s3', !on);
+    var knob = el.querySelector('.knob');
+    knob.style.transform = on ? 'translateX(20px)' : 'translateX(0)';
+  }
+  $('toggle-sound').addEventListener('click', function(){
+    state.settings.sound = !state.settings.sound;
+    setToggle(this, state.settings.sound);
+    SFX.click();
+  });
+  $('toggle-haptics').addEventListener('click', function(){
+    state.settings.haptics = !state.settings.haptics;
+    setToggle(this, state.settings.haptics);
+    SFX.click();
+    haptic(20);
+  });
+  qsa('#difficulty-seg [data-diff]').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      state.settings.difficulty = btn.getAttribute('data-diff');
+      qsa('#difficulty-seg [data-diff]').forEach(function(b){ b.classList.remove('active'); });
+      btn.classList.add('active');
+      SFX.click();
+    });
+  });
+  $('sensitivity-slider').addEventListener('input', function(){
+    state.settings.sensitivity = parseInt(this.value, 10);
+    $('sensitivity-value').textContent = state.settings.sensitivity;
+    if($('sens-value')) $('sens-value').textContent = state.settings.sensitivity;
+  });
+  $('btn-reset-stats').addEventListener('click', function(){
+    state.profile.wins = 0; state.profile.losses = 0; state.profile.streak = 0;
+    state.profile.rank = 'UNRANKED'; state.profile.level = 1;
+    state.matchHistory = [];
+    renderProfile();
+    renderLog();
+    toast('PILOT STATS RESET');
+    SFX.click();
+  });
+
+  /* ================= SYSTEM STATUS PANEL ================= */
+  function runDiagnostics(){
+    $('sys-ping').textContent = Math.floor(rand(8,45)) + 'ms';
+    $('sys-fps').textContent = Math.floor(rand(55,60)) + 'fps';
+    $('sys-node').textContent = pick(['NEO-TOKYO-3','BERLIN-GRID-9','LUNA-RELAY-1','SEOUL-CORE-7']);
+    $('sys-sync').textContent = Math.floor(rand(92,100)) + '%';
+  }
+  $('btn-run-diagnostics').addEventListener('click', function(){ runDiagnostics(); SFX.click(); toast('DIAGNOSTICS COMPLETE'); });
+
+  /* ================= TOURNAMENT PANEL ================= */
+  function renderBracket(){
+    var rounds = ['RAZOR_WIRE', 'YOU', 'NULL_SECTOR', 'GHOST_PROTOCOL'];
+    var list = $('bracket-list');
+    list.innerHTML = '';
+    rounds.forEach(function(name, i){
+      var row = document.createElement('div');
+      var isYou = name === 'YOU';
+      row.className = 'flex items-center justify-between px-3 py-2 rounded ' + (isYou ? 'bg-primary/10 border border-primary/40' : 'bg-s2 border border-outline');
+      row.innerHTML = '<span class="font-mono text-xs ' + (isYou ? 'text-primary' : 'text-ink-dim') + '">' + name + '</span>' +
+        '<span class="font-mono text-[10px] ' + (isYou ? 'text-primary' : 'text-ink-dim/60') + '">SEED ' + (i+1) + '</span>';
+      list.appendChild(row);
+    });
+  }
+  $('btn-enter-bracket').addEventListener('click', function(){
+    closePanel();
+    startMatch('tournament', 'RAZOR_WIRE');
+  });
+
+  /* ================= LOBBY PANEL ================= */
+  function renderLobby(){
+    var list = $('lobby-list');
+    list.innerHTML = '';
+    OPPONENTS.forEach(function(o){
+      var row = document.createElement('div');
+      row.className = 'glass-panel rounded-xl p-3 flex items-center justify-between';
+      row.innerHTML =
+        '<div class="flex items-center gap-3">' +
+          '<div class="w-10 h-10 rounded-full border-2 border-secondary-light/60 flex items-center justify-center bg-s2"><span class="material-symbols-outlined text-secondary-light text-lg">smart_toy</span></div>' +
+          '<div><p class="font-mono text-sm text-ink">' + o.name + '</p><p class="font-mono text-[10px] text-ink-dim">' + o.rank + ' &middot; ' + o.winrate + ' WR</p></div>' +
+        '</div>' +
+        '<button class="challenge-btn font-mono text-[10px] uppercase tracking-widest px-3 py-2 rounded bg-primary/15 border border-primary/40 text-primary active:scale-95 transition-all">Challenge</button>';
+      row.querySelector('.challenge-btn').addEventListener('click', function(){
+        closePanel();
+        startMatch('quick', o.name);
+      });
+      list.appendChild(row);
+    });
+  }
+
+  /* ================= LOADOUT PANEL ================= */
+  function renderSkins(){
+    var grid = $('skin-grid');
+    grid.innerHTML = '';
+    SKINS.forEach(function(s){
+      var locked = s.locked;
+      var el = document.createElement('button');
+      el.className = 'skin-swatch flex flex-col items-center gap-1 p-2 rounded-lg border border-outline' + (locked ? ' locked' : '') + (state.loadout.skin === s.id ? ' selected' : '');
+      el.innerHTML = '<span class="w-9 h-9 rounded-full" style="background:' + s.color + ';box-shadow:0 0 10px ' + s.color + '"></span>' +
+        '<span class="font-mono text-[9px] text-ink-dim">' + s.name + '</span>' +
+        (locked ? '<span class="material-symbols-outlined text-[14px] text-ink-dim">lock</span>' : '');
+      el.addEventListener('click', function(){
+        if(locked){ toast('REACH ELITE V TO UNLOCK'); SFX.miss(); return; }
+        state.loadout.skin = s.id;
+        document.documentElement.style.setProperty('--ball-color', s.color);
+        renderSkins();
+        SFX.click();
+        toast(s.name.toUpperCase() + ' EQUIPPED');
+      });
+      grid.appendChild(el);
+    });
+  }
+
+  /* ================= ARENA / TABLE SKIN SELECT ================= */
+  /* Swaps a CSS class on #app only. Every physics function above reads
+     cup/ball/table geometry live via getBoundingClientRect — none of it
+     touches which arena is active, so switching skins mid-session, even
+     mid-match, cannot change gameplay, only appearance. */
+  function applyArenaTheme(id){
+    var app = $('app');
+    var isSpace = id === 'space';
+    app.classList.toggle('theme-space', isSpace);
+    var layer = $('star-layer');
+    if(layer){
+      if(isSpace && !layer.dataset.built){
+        var frag = document.createDocumentFragment();
+        for(var i=0;i<70;i++){
+          var s = document.createElement('div');
+          s.className = 'star-pt';
+          var size = rand(1, 2.6);
+          s.style.width = size + 'px';
+          s.style.height = size + 'px';
+          s.style.left = rand(2, 98) + '%';
+          s.style.top = rand(2, 98) + '%';
+          s.style.animationDelay = rand(0, 3.4) + 's';
+          s.style.opacity = rand(0.3, 0.9);
+          frag.appendChild(s);
+        }
+        layer.appendChild(frag);
+        layer.dataset.built = '1';
+      }
+      layer.style.display = isSpace ? '' : 'none';
+    }
+  }
+  function renderArenas(){
+    var grid = $('arena-grid');
+    if(!grid) return;
+    grid.innerHTML = '';
+    ARENAS.forEach(function(a){
+      var el = document.createElement('button');
+      el.className = 'arena-swatch flex flex-col items-center gap-1 p-2 rounded-lg border border-outline' + (state.loadout.arena === a.id ? ' selected' : '');
+      el.innerHTML = '<span class="w-9 h-9 rounded-full" style="background:' + a.color + ';box-shadow:0 0 10px ' + a.color + '"></span>' +
+        '<span class="font-mono text-[9px] text-ink-dim">' + a.name + '</span>';
+      el.addEventListener('click', function(){
+        state.loadout.arena = a.id;
+        applyArenaTheme(a.id);
+        renderArenas();
+        SFX.click();
+        toast(a.name.toUpperCase() + ' ARENA LOADED');
+      });
+      grid.appendChild(el);
+    });
+  }
+
+  /* ================= PROFILE / STATS RENDER ================= */
+  function renderProfile(){
+    var p = state.profile;
+    var total = p.wins + p.losses;
+    var wr = total > 0 ? ((p.wins/total)*100).toFixed(1) : '0.0';
+    $('stat-rank').textContent = p.rank;
+    $('stat-wins').textContent = p.wins.toLocaleString();
+    $('stat-winrate').textContent = wr + '%';
+    $('stat-streak').textContent = p.streak + 'W';
+    $('drawer-name').textContent = p.name;
+    $('drawer-rank').textContent = 'LVL ' + p.level + ' | ' + p.rank;
+    $('profile-name').textContent = p.name;
+    $('profile-rank').textContent = 'LVL ' + p.level + ' | ' + p.rank;
+    $('profile-wins').textContent = p.wins.toLocaleString();
+    $('profile-losses').textContent = p.losses.toLocaleString();
+    $('profile-winrate').textContent = wr + '%';
+    $('profile-streak').textContent = p.streak + 'W';
+  }
+  function renderLog(){
+    var list = $('log-list');
+    list.innerHTML = '';
+    if(state.matchHistory.length === 0){
+      list.innerHTML = '<p class="font-mono text-xs text-ink-dim text-center py-8">NO MATCH DATA LOGGED</p>';
+      return;
+    }
+    state.matchHistory.forEach(function(m){
+      var row = document.createElement('div');
+      var win = m.result === 'W';
+      row.className = 'flex items-center justify-between px-3 py-2.5 rounded-lg glass-panel border-l-4 ' + (win ? 'border-primary' : 'border-magenta');
+      row.innerHTML =
+        '<div class="flex flex-col"><span class="font-mono text-xs text-ink">' + m.opp + '</span><span class="font-mono text-[9px] text-ink-dim">' + m.mode + '</span></div>' +
+        '<div class="flex items-center gap-2"><span class="font-mono text-xs ' + (win ? 'text-primary' : 'text-magenta') + '">' + m.score + '</span>' +
+        '<span class="font-display text-xs ' + (win ? 'text-primary' : 'text-magenta') + '">' + m.result + '</span></div>';
+      list.appendChild(row);
+    });
+  }
+
+  /* ================= GAME: SETUP ================= */
+  var ROW_ORDER_AI = [4,3,2,1];
+  var ROW_ORDER_PLAYER = [1,2,3,4];
+
+  function buildCups(){
+    buildFormation($('ai-cups'), ROW_ORDER_AI, 'ai');
+    buildFormation($('player-cups'), ROW_ORDER_PLAYER, 'player');
+  }
+  function buildFormation(container, rowOrder, team){
+    container.innerHTML = '';
+    var idx = 0;
+    rowOrder.forEach(function(rowSize){
+      var row = document.createElement('div');
+      row.className = 'cup-row';
+      for(var i=0;i<rowSize;i++){
+        var cup = document.createElement('div');
+        cup.className = 'cup cup-' + team;
+        cup.id = team + '-cup-' + idx;
+        cup.dataset.idx = idx;
+        cup.dataset.team = team;
+        var inner = document.createElement('div');
+        inner.className = 'cup-inner';
+        cup.appendChild(inner);
+        row.appendChild(cup);
+        idx++;
+      }
+      container.appendChild(row);
+    });
+  }
+
+  function newMatchState(mode, opponent){
+    return {
+      mode: mode,
+      opponent: opponent,
+      active: true,
+      paused: false,
+      autoPaused: false,
+      timer: 90,
+      overtimeUsed: false,
+      playerRemaining: 10,
+      aiRemaining: 10,
+      power: 75,
+      powerDir: 1,
+      turn: 'player',
+      busy: false,
+      trickArmed: false,
+      trickMeter: 0,
+      wind: 'LOW',
+      spin: false,
+      attempts: 0,
+      hits: 0,
+      timerHandle: null,
+      powerHandle: null
+    };
+  }
+
+  function startMatch(mode, opponent){
+    closePanel();
+    state.match = newMatchState(mode, opponent || 'CYBER_VOID');
+    buildCups();
+    resetBallPosition('player');
+    updateGameHUD();
+    showScreen('screen-game');
+    sizeAimSvg();
+    resetAimHud();
+    startPowerLoop();
+    startTimer();
+    toast((mode || 'QUICK').toUpperCase() + ' MATCH VS ' + (opponent || 'CYBER_VOID'));
+  }
+
+  function endMatchCleanup(){
+    var m = state.match;
+    if(!m) return;
+    if(m.timerHandle) clearInterval(m.timerHandle);
+    if(m.powerHandle) cancelAnimationFrame(m.powerHandle);
+    m.active = false;
+  }
+
+  /* ================= GAME: POWER METER ================= */
+  /* Power is now derived entirely from live drag distance (see AIMING SYSTEM below).
+     This just resets the HUD readout to a neutral state at the start of a match/turn. */
+  function startPowerLoop(){
+    $('power-fill').style.height = '0%';
+    $('power-readout').textContent = '0%';
+  }
+
+  /* ================= GAME: TIMER ================= */
+  function startTimer(){
+    var m = state.match;
+    m.timerHandle = setInterval(function(){
+      if(!m.active || m.paused || m.autoPaused) return;
+      m.timer -= 1;
+      $('game-timer').textContent = m.timer;
+      if(m.timer <= 0){
+        handleTimeUp();
+      }
+    }, 1000);
+  }
+  function pauseMatchTimer(){ /* interval checks m.autoPaused/m.paused each tick, nothing else required */ }
+  function resumeMatchTimer(){ /* no-op, loops resume automatically once flags clear */ }
+
+  function handleTimeUp(){
+    var m = state.match;
+    var playerScore = 10 - m.aiRemaining;
+    var aiScore = 10 - m.playerRemaining;
+    if(playerScore === aiScore && !m.overtimeUsed){
+      m.overtimeUsed = true;
+      m.timer = 15;
+      toast('OVERTIME: 15s SUDDEN DEATH');
+      return;
+    }
+    if(playerScore > aiScore){ finishMatch('win'); }
+    else if(aiScore > playerScore){ finishMatch('lose'); }
+    else { finishMatch('draw'); }
+  }
+
+  /* ================= GAME: HUD RENDER ================= */
+  function updateGameHUD(){
+    var m = state.match;
+    if(!m) return;
+    $('game-timer').textContent = m.timer;
+    var playerScore = 10 - m.aiRemaining;
+    var aiScore = 10 - m.playerRemaining;
+    $('game-score').textContent = String(playerScore).padStart(2,'0') + ' : ' + String(aiScore).padStart(2,'0');
+    var acc = m.attempts > 0 ? Math.round((m.hits/m.attempts)*100) : 88;
+    $('game-accuracy').textContent = 'ACC: ' + acc + '%';
+    $('game-ai-streak').textContent = 'STREAK: X' + state.profile.streak;
+    renderTrickMeter();
+  }
+  function renderTrickMeter(){
+    var m = state.match;
+    var seg = $('trick-segments');
+    seg.innerHTML = '';
+    var lit = Math.round((m.trickMeter/100)*5);
+    for(var i=0;i<5;i++){
+      var d = document.createElement('div');
+      if(i < lit) d.classList.add('lit');
+      seg.appendChild(d);
+    }
+    var trickBtn = $('btn-trick-shot');
+    if(m.trickMeter >= 100){
+      trickBtn.classList.add('trick-ready');
+      trickBtn.classList.remove('opacity-60');
+    } else {
+      trickBtn.classList.remove('trick-ready');
+      trickBtn.classList.add('opacity-60');
+    }
+  }
+
+  /* ================= GAME: BALL FLIGHT ================= */
+  function resetBallPosition(fromTeam){
+    var ball = $('ball');
+    var laneEl = fromTeam === 'player' ? $('player-cups') : $('ai-cups');
+    var rect = laneEl.getBoundingClientRect();
+    ball.style.transform = '';
+    var x = rect.left + rect.width/2 - Physics.BALL_R;
+    var y = fromTeam === 'player' ? (rect.bottom - 10) : (rect.top - 10);
+    ball.style.left = x + 'px';
+    ball.style.top = y + 'px';
+  }
+
+  /* ============================================================================
+     GAMEPLAY PHYSICS SUBSYSTEM — v2
+     ----------------------------------------------------------------------------
+     The entire previous ball-flight / aiming / cup-collision implementation has
+     been deleted, not tuned. This is a from-scratch rewrite (archived copy of
+     the old code lives in ARCHIVED_legacy_physics_v1.js for reference only —
+     it is not loaded here). UI, menus, multiplayer, game modes, statistics,
+     animations, sound and visual effects are untouched; only the gameplay
+     mechanics underneath them changed.
+
+     Five components, each with exactly one job:
+
+       BeerPongPhysicsEngine  Pure ball-flight integration at a FIXED timestep
+                              (gravity, drag, Magnus side-spin, spin decay,
+                              rolling/sliding friction, table restitution).
+                              Never advances by render dt — always this.DT.
+
+       CupCollisionSystem     Real cup geometry as five distinct collider
+                              zones (outer wall, rim, opening, inner wall,
+                              floor), resolved with continuous (swept)
+                              collision so a fast, flat throw can never tunnel
+                              through a thin rim between two samples. Produces
+                              rim shots, lip-ins, lip-outs, rim rolls, soft
+                              drops and hard bounces as emergent outcomes of
+                              geometry + momentum — never a coin flip.
+
+       TrajectoryPredictor    Runs the exact same integrator + collision
+                              system the real throw will use, so the drawn
+                              prediction (path, bounce markers, rim marker,
+                              landing ring, target-cup highlight) IS the
+                              outcome, not an approximation of it.
+
+       AimController          Two-stage precision input: place a landing
+                              reticle over the target, then pull the ball
+                              backward — pull distance sets power, vertical
+                              pull sets arc, horizontal pull sets side-spin.
+
+       ThrowController        Plays the precomputed, deterministic sample
+                              array back at a fixed physics rate (decoupled
+                              from render FPS — rAF only decides WHEN we
+                              sample the already-resolved path, it never
+                              re-simulates or varies physics with frame rate)
+                              and resolves scoring.
+
+     Nothing in this module calls Math.random() for ball flight. Identical
+     crosshair + identical pull ALWAYS reproduces the identical flight, every
+     bounce, every rim graze, every settle — down to the pixel. The AI's
+     *aim* uses randomness (that's opponent skill, not physics), but once its
+     target point is chosen, the same deterministic engine resolves it.
+     ============================================================================ */
+
+  class BeerPongPhysicsEngine {
+    constructor(){
+      this.GRAVITY = 2500;             // px/s^2 downward acceleration
+      this.AIR_DRAG = 0.045;           // velocity-proportional air resistance
+      this.MAGNUS = 0.00022;           // side-spin curve strength (Magnus effect)
+      this.SPIN_DECAY = 0.55;          // fraction of spin lost per second, airborne
+      this.BALL_R = 13;                // ball radius, px (matches #ball 26px dia)
+      this.CUP_HEIGHT = 30;            // rim height above table, px
+      this.TABLE_BOUNCE_E = 0.42;      // table restitution coefficient
+      this.TABLE_BOUNCE_DECAY = 0.82;  // energy lost on each successive table bounce
+      this.RIM_BOUNCE_E = 0.48;        // rim restitution
+      this.CUP_WALL_E = 0.30;          // interior cup-wall restitution
+      this.CUP_FLOOR_E = 0.22;         // cup-floor restitution
+      this.ROLL_FRICTION = 620;        // px/s^2 deceleration, ball rolling flat
+      this.SLIDE_FRICTION = 900;       // px/s^2 deceleration, ball skidding off a hard bounce
+      this.STOP_SPEED = 14;            // px/s below which a rolling ball is "stopped"
+      this.DT = 1/120;                 // FIXED physics timestep — never tied to rAF/frame rate
+      this.MAX_SIM_SECONDS = 4.5;
+    }
+
+    /* One fixed-timestep integration step for a ball in flight (or rolling):
+       drag, gravity, Magnus side-curve, then position advance. Spin decays
+       here too, but only while airborne (not captured inside a cup). Always
+       called with dt === this.DT, repeatedly, by the predictor — never with
+       a variable, frame-rate-derived dt. */
+    integrate(s, dt, windAccel){
+      var speed = Math.hypot(s.vx, s.vy, s.vz) || 0.0001;
+      var dragK = Math.exp(-this.AIR_DRAG * dt * (speed/500));
+      s.vx *= dragK; s.vy *= dragK; s.vz *= dragK;
+      s.vz -= this.GRAVITY * dt;
+      if(!s.insideCup){
+        s.vx += this.MAGNUS * s.spinSide * speed * dt * 60; // side-spin curve while airborne
+        s.vx += (windAccel||0) * dt;
+        s.spinTop *= (1 - this.SPIN_DECAY*dt);
+        s.spinSide *= (1 - this.SPIN_DECAY*dt);
+      }
+      s.x += s.vx*dt; s.y += s.vy*dt; s.z += s.vz*dt;
+    }
+
+    /* Table surface + rail collision: bounce with an exact, sub-step contact
+       time (so a hard low throw can't tunnel through z=0 between samples),
+       rolling/sliding friction once flat (soft throws roll, hard throws
+       skid then settle into a roll), and edge/corner rail collisions on all
+       four sides of the table. */
+    resolveTable(s, prev, tableRect){
+      if(s.z <= 0 && prev.z > 0){
+        var t = prev.z / ((prev.z - s.z) || 1e-6);
+        s.x = prev.x + (s.x - prev.x) * t;
+        s.y = prev.y + (s.y - prev.y) * t;
+        s.z = 0;
+        s.bounces++;
+        var e = this.TABLE_BOUNCE_E * Math.pow(this.TABLE_BOUNCE_DECAY, s.bounces - 1);
+        s.vz = Math.abs(s.vz) * e;
+        var grip = 1 + clamp(s.spinTop, -1, 1) * 0.18; // topspin grips & carries, backspin brakes
+        var wasHard = Math.abs(s.vz) > 260;
+        s.vx *= (wasHard ? 0.66 : 0.72) * grip;
+        s.vy *= (wasHard ? 0.66 : 0.72) * grip;
+        s.spinTop *= 0.7; s.spinSide *= 0.7;
+        s.event = 'bounce';
+        if(s.vz < 22){ s.z = 0; s.vz = 0; }
+      } else if(s.z < 0){
+        s.z = 0;
+      }
+      if(s.z <= 0.5){
+        var speed = Math.hypot(s.vx, s.vy);
+        if(speed > 0){
+          var decel = (speed > 260 ? this.SLIDE_FRICTION : this.ROLL_FRICTION) * this.DT;
+          var ns = Math.max(0, speed - decel);
+          var k = ns / speed;
+          s.vx *= k; s.vy *= k;
+        }
+      }
+      if(tableRect){
+        if(s.x < tableRect.left + this.BALL_R){ s.x = tableRect.left + this.BALL_R; s.vx = Math.abs(s.vx) * 0.5; }
+        if(s.x > tableRect.right - this.BALL_R){ s.x = tableRect.right - this.BALL_R; s.vx = -Math.abs(s.vx) * 0.5; }
+        if(s.y < tableRect.top + this.BALL_R){ s.y = tableRect.top + this.BALL_R; s.vy = Math.abs(s.vy) * 0.5; }
+        if(s.y > tableRect.bottom - this.BALL_R){ s.y = tableRect.bottom - this.BALL_R; s.vy = -Math.abs(s.vy) * 0.5; }
+      }
+    }
+  }
+
+  class CupCollisionSystem {
+    constructor(engine, cupEls, difficulty){
+      this.engine = engine;
+      this.difficulty = difficulty || 'normal';
+      this.cups = this._buildGeometry(cupEls);
+    }
+
+    /* Each cup is modeled as a real axisymmetric solid with five distinct
+       collider zones — never a single flat circular hitbox:
+         outer wall  the cup's physical outer diameter
+         rim         the lip band the ball actually contacts (inset from
+                     the outer wall)
+         opening     the true mouth the ball must clear to drop straight in
+         inner wall  the interior cavity wall once the ball is inside
+         floor       where the ball finally settles = a score
+       Difficulty only changes how forgiving the opening/rim are; it never
+       touches ball-flight physics. */
+    _buildGeometry(cupEls){
+      var openMul = this.difficulty === 'easy' ? 0.90 : (this.difficulty === 'hard' ? 0.60 : 0.76);
+      var rimMul  = this.difficulty === 'easy' ? 1.30 : (this.difficulty === 'hard' ? 0.92 : 1.05);
+      return cupEls.map(function(el){
+        var r = el.getBoundingClientRect();
+        var baseR = r.width / 2;
+        return {
+          el: el, cx: r.left + r.width/2, cy: r.top + r.height/2,
+          outerR: baseR * rimMul,
+          rimR: baseR * rimMul * 0.94,
+          openR: baseR * openMul,
+          cavityR: baseR * openMul + 1
+        };
+      });
+    }
+
+    /* Airborne approach check against every live cup: a broad-phase distance
+       cull, then a swept (continuous) test for the exact instant the ball
+       crosses the rim's height band — so a fast, flat throw can never skip
+       through a thin rim between two fixed-timestep samples. */
+    checkApproach(s, prev){
+      for(var i=0;i<this.cups.length;i++){
+        var g = this.cups[i];
+        var dCur = Math.hypot(s.x - g.cx, s.y - g.cy);
+        if(dCur > g.outerR + this.engine.BALL_R + 30) continue; // broad-phase cull
+        var crossedDown = prev.z > this.engine.CUP_HEIGHT && s.z <= this.engine.CUP_HEIGHT;
+        if(!crossedDown) continue;
+        var t = (prev.z - this.engine.CUP_HEIGHT) / ((prev.z - s.z) || 1e-6);
+        var ix = prev.x + (s.x - prev.x) * t, iy = prev.y + (s.y - prev.y) * t;
+        var dist = Math.hypot(ix - g.cx, iy - g.cy);
+        if(this._hitsOpening(dist, g)){
+          s.x = ix; s.y = iy; s.z = this.engine.CUP_HEIGHT;
+          s.insideCup = g; s.event = 'enter';
+          return g;
+        }
+        if(this._hitsRim(dist, g)){
+          s.x = ix; s.y = iy; s.z = this.engine.CUP_HEIGHT;
+          this._resolveRimContact(s, prev, g, ix, iy, dist);
+          return g;
+        }
+      }
+      return null;
+    }
+
+    _hitsOpening(dist, g){ return dist + this.engine.BALL_R <= g.openR; }
+    _hitsRim(dist, g){ return dist <= g.rimR + this.engine.BALL_R; }
+
+    /* Rim shots: whether a shot that clips the lip drops in ("lip-in"),
+       spins back out ("lip-out"), or simply deflects clean off the rim
+       ("rim") is decided by a deterministic lipScore built from how
+       centered the contact was across the rim band and how steep the
+       ball's approach was — pure geometry + momentum, never a dice roll. */
+    _resolveRimContact(s, prev, g, ix, iy, dist){
+      var nx = (ix - g.cx) / (dist || 1), ny = (iy - g.cy) / (dist || 1);
+      var vn = s.vx * nx + s.vy * ny;
+      var centered = clamp((g.rimR - dist) / ((g.rimR - g.openR) || 1), 0, 1);
+      var steep = clamp(-prev.vz / (Math.abs(vn) * 40 + 120), 0, 1);
+      var lipScore = centered * 0.62 + steep * 0.38;
+      if(lipScore >= 0.58 && vn <= 34){
+        s.insideCup = g; s.event = 'enter';
+      } else if(lipScore >= 0.32 && vn <= 60){
+        var vzAbs = Math.abs(prev.vz);
+        var catches = ((lipScore - 0.32) * 260 + (40 - vn) * 0.9) > vzAbs * 0.12;
+        if(catches){
+          s.vx *= 0.22; s.vy *= 0.22; s.vz = Math.abs(s.vz) * 0.12;
+          s.insideCup = g; s.event = 'lip-in';
+        } else {
+          var restLip = this.engine.RIM_BOUNCE_E * 0.7;
+          s.vx -= (1 + restLip) * vn * nx;
+          s.vy -= (1 + restLip) * vn * ny;
+          s.vz = Math.abs(s.vz) * 0.4;
+          s.spinTop *= 0.5; s.spinSide *= 0.5;
+          s.event = 'lip-out';
+        }
+      } else {
+        var rest = this.engine.RIM_BOUNCE_E;
+        s.vx -= (1 + rest) * vn * nx;
+        s.vy -= (1 + rest) * vn * ny;
+        s.vz = Math.abs(s.vz) * 0.55;
+        s.spinTop *= 0.6; s.spinSide *= 0.6;
+        s.event = 'rim';
+      }
+    }
+
+    /* Once captured, the ball is contained by the interior wall (a soft
+       bounce back toward center on overshoot) and eventually contacts the
+       floor — a hard entry produces a visible bounce off the floor before
+       settling, a soft drop just sinks straight down. */
+    resolveInterior(s){
+      var g = s.insideCup;
+      var d = Math.hypot(s.x - g.cx, s.y - g.cy);
+      var wallR = g.cavityR;
+      if(this._hitsInnerWall(d, wallR)){
+        var nx = (s.x - g.cx) / (d || 1), ny = (s.y - g.cy) / (d || 1);
+        var vn = s.vx * nx + s.vy * ny;
+        s.vx -= (1 + this.engine.CUP_WALL_E) * vn * nx;
+        s.vy -= (1 + this.engine.CUP_WALL_E) * vn * ny;
+        var k = (wallR - this.engine.BALL_R) / (d || 1);
+        s.x = g.cx + (s.x - g.cx) * k; s.y = g.cy + (s.y - g.cy) * k;
+      }
+      if(this._hitsFloor(s)){
+        s.z = 0;
+        s.bounces++;
+        s.vz = Math.abs(s.vz) * this.engine.CUP_FLOOR_E;
+        s.vx *= 0.5; s.vy *= 0.5;
+        if(s.vz < 20) s.vz = 0;
+      }
+    }
+    _hitsInnerWall(d, wallR){ return d + this.engine.BALL_R > wallR; }
+    _hitsFloor(s){ return s.z <= 0; }
+  }
+
+  class TrajectoryPredictor {
+    constructor(engine){
+      this.engine = engine;
+    }
+
+    /* Runs the ENTIRE deterministic simulation, fixed-timestep, start to
+       settle, synchronously. Used identically for the live drag-preview and
+       for resolving a real throw — the predicted path the player sees while
+       aiming and the path the ball actually flies are the same function
+       call with the same inputs, so they are, by construction, the same
+       output. The final throw matches the prediction exactly, always. */
+    simulate(init, cupEls, tableRect, difficulty, windAccel){
+      var cupSystem = new CupCollisionSystem(this.engine, cupEls, difficulty);
+      var eng = this.engine;
+      var s = {
+        x: init.x, y: init.y, z: init.z || 0,
+        vx: init.vx, vy: init.vy, vz: init.vz,
+        spinTop: init.spinTop || 0, spinSide: init.spinSide || 0,
+        bounces: 0, insideCup: null, settled: false, outcome: null, hitCupEl: null, event: null
+      };
+      var samples = [{ x:s.x, y:s.y, z:s.z, event:null }];
+      var dt = eng.DT;
+      var maxSteps = Math.round(eng.MAX_SIM_SECONDS / dt);
+
+      for(var i=0;i<maxSteps && !s.settled;i++){
+        var prev = { x:s.x, y:s.y, z:s.z, vz:s.vz };
+        eng.integrate(s, dt, windAccel);
+        s.event = null;
+        if(!s.insideCup) cupSystem.checkApproach(s, prev);
+        if(s.insideCup) cupSystem.resolveInterior(s); else eng.resolveTable(s, prev, tableRect);
+
+        var hs = Math.hypot(s.vx, s.vy);
+        if(s.insideCup){
+          if(Math.abs(s.vz) < 25 && s.z <= 1){ s.settled = true; s.outcome = 'hit'; s.hitCupEl = s.insideCup.el; }
+        } else if(s.z <= 0.5 && hs < eng.STOP_SPEED){
+          s.settled = true; s.outcome = s.outcome || 'miss';
+        }
+        samples.push({ x:s.x, y:s.y, z:Math.max(0,s.z), event:s.event });
+      }
+      if(!s.settled) s.outcome = s.outcome || 'miss';
+      return { samples: samples, outcome: s.outcome, hitCupEl: s.hitCupEl, finalX: s.x, finalY: s.y, dt: dt };
+    }
+
+    grazedRim(sim){
+      for(var i=0;i<sim.samples.length;i++){
+        var ev = sim.samples[i].event;
+        if(ev === 'rim' || ev === 'lip-in' || ev === 'lip-out') return true;
+      }
+      return false;
+    }
+
+    firstRimSample(sim){
+      for(var i=0;i<sim.samples.length;i++){
+        var ev = sim.samples[i].event;
+        if(ev === 'rim' || ev === 'lip-in' || ev === 'lip-out') return sim.samples[i];
+      }
+      return null;
+    }
+
+    /* Draws the predicted flight path, bounce markers, rim-contact marker
+       and landing ring into the fixed #aim-svg overlay, plus the live pull
+       vector, so the player can see exactly what they're about to release. */
+    renderPreview(svgEl, sol, pullPoint, valid){
+      if(!valid || !sol){ svgEl.innerHTML = ''; return; }
+      var bs = sol.ballStart;
+      var grazed = this.grazedRim(sol);
+      var color = sol.outcome === 'hit' ? '#39ff8c' : (grazed ? '#ffd23f' : '#00f3ff');
+      var pts = [];
+      var step = Math.max(1, Math.floor(sol.samples.length / 70));
+      var markers = '';
+      for(var i=0;i<sol.samples.length;i+=step){
+        var p = sol.samples[i];
+        pts.push(p.x.toFixed(1) + ',' + (p.y - p.z*0.85).toFixed(1));
+      }
+      sol.samples.forEach(function(p){
+        if(p.event === 'bounce'){
+          markers += '<circle cx="'+p.x.toFixed(1)+'" cy="'+(p.y - p.z*0.85).toFixed(1)+'" r="3" fill="#00f3ff" opacity="0.8"/>';
+        }
+      });
+      var rimSample = this.firstRimSample(sol);
+      var rimMarker = '';
+      if(rimSample){
+        var rx = rimSample.x.toFixed(1), ry = (rimSample.y - rimSample.z*0.85).toFixed(1);
+        rimMarker = '<circle cx="'+rx+'" cy="'+ry+'" r="10" fill="none" stroke="#ffd23f" stroke-width="2" stroke-dasharray="3 4" opacity="0.9"/>' +
+                    '<circle cx="'+rx+'" cy="'+ry+'" r="2.5" fill="#ffd23f"/>';
+      }
+      var last = sol.samples[sol.samples.length - 1];
+      var lx = last.x.toFixed(1), ly = (last.y - last.z*0.85).toFixed(1);
+      var tgtLine = '<line x1="'+sol.target.x+'" y1="'+sol.target.y+'" x2="'+lx+'" y2="'+ly+'" stroke="#ff2ec4" stroke-width="1" stroke-dasharray="2 5" opacity="0.4"/>';
+      var pullLine = pullPoint ? ('<line x1="'+bs.x+'" y1="'+bs.y+'" x2="'+pullPoint.x+'" y2="'+pullPoint.y+'" stroke="#ff2ec4" stroke-width="3" stroke-dasharray="6 7" stroke-linecap="round" opacity="0.85"/>') : '';
+      svgEl.innerHTML =
+        tgtLine + pullLine +
+        '<polyline points="'+pts.join(' ')+'" fill="none" stroke="'+color+'" stroke-width="3" stroke-dasharray="2 10" stroke-linecap="round" opacity="0.95"/>' +
+        markers + rimMarker +
+        '<circle cx="'+lx+'" cy="'+ly+'" r="15" fill="none" stroke="'+color+'" stroke-width="2.5" opacity="0.95"/>' +
+        '<circle cx="'+lx+'" cy="'+ly+'" r="3.5" fill="'+color+'"/>';
+    }
+
+    /* Highlights whichever cup the predicted shot is on course to land in.
+       Skipped on Hard difficulty, where the player gets pure physics
+       feedback and no assist. */
+    highlightTargetCup(cupsContainerSel, sol, difficulty){
+      qsa(cupsContainerSel + ' .cup').forEach(function(c){ c.classList.remove('cup-target'); });
+      if(difficulty === 'hard' || !sol) return;
+      var highlightCup = sol.hitCupEl;
+      if(!highlightCup){
+        var cupsEls = qsa(cupsContainerSel + ' .cup:not(.hit)');
+        var last = sol.samples[sol.samples.length - 1];
+        var nd = Infinity, nc = null;
+        cupsEls.forEach(function(c){
+          var r = c.getBoundingClientRect(); var cx = r.left+r.width/2, cy = r.top+r.height/2;
+          var d = Math.hypot(cx-last.x, cy-last.y);
+          if(d < nd){ nd = d; nc = c; }
+        });
+        if(nc && nd < 60) highlightCup = nc;
+      }
+      if(highlightCup) highlightCup.classList.add('cup-target');
+    }
+  }
+
+  class AimController {
+    constructor(engine, predictor){
+      this.engine = engine;
+      this.predictor = predictor;
+      this.REF_DRAG = 170;    // px pull that represents "perfect, target-exact" power
+      this.MAX_DRAG = 230;    // px pull cap — beyond this the overshoot readout clamps
+      this.MIN_DRAG = 14;     // px pull below which a release is ignored (accidental tap)
+
+      this.layerEl = $('aim-layer');
+      this.svgEl = $('aim-svg');
+      this.hintEl = $('aim-hint');
+      this.crosshairEl = $('aim-crosshair');
+      this.statsHudEl = $('aim-stats-hud');
+      this.arcFillEl = $('arc-fill');
+      this.spinFillEl = $('spin-fill');
+      this.releaseFillEl = $('release-fill');
+      this.releaseReadoutEl = $('release-readout');
+
+      this.phase = 'target';   // 'target' (stage 1: place reticle) | 'power' (stage 2: pull back)
+      this.active = false;
+      this.pointerId = null;
+      this.ballStart = null;
+      this.current = null;
+      this.target = null;      // locked (x,y) landing point, set at end of stage 1
+
+      this._bindPointerEvents();
+    }
+
+    resizeSvg(){
+      this.svgEl.setAttribute('viewBox', '0 0 ' + window.innerWidth + ' ' + window.innerHeight);
+      this.svgEl.setAttribute('width', window.innerWidth);
+      this.svgEl.setAttribute('height', window.innerHeight);
+    }
+
+    isReady(){
+      var m = state.match;
+      return !!(m && m.active && !m.paused && !m.autoPaused && !m.busy && m.turn === 'player');
+    }
+
+    defaultTarget(){
+      var r = $('ai-cups').getBoundingClientRect();
+      return { x: r.left + r.width/2, y: r.top + r.height/2 };
+    }
+
+    tableClampedPoint(pt){
+      var r = $('table-surface').getBoundingClientRect();
+      return { x: clamp(pt.x, r.left+16, r.right-16), y: clamp(pt.y, r.top+16, r.bottom-16) };
+    }
+
+    moveCrosshair(pt, locked){
+      this.crosshairEl.style.left = pt.x + 'px';
+      this.crosshairEl.style.top = pt.y + 'px';
+      this.crosshairEl.classList.add('show');
+      this.crosshairEl.classList.toggle('locked', !!locked);
+    }
+
+    setHintText(){
+      this.hintEl.textContent = this.phase === 'target'
+        ? 'Drag to place crosshair over target'
+        : 'Pull the ball back & release to throw';
+    }
+
+    reset(){
+      this.svgEl.innerHTML = '';
+      $('power-fill').style.height = '0%';
+      $('power-readout').textContent = '0%';
+      qsa('#ai-cups .cup').forEach(function(c){ c.classList.remove('cup-target'); });
+      this.statsHudEl.classList.remove('show');
+      this.crosshairEl.classList.remove('show', 'locked');
+      this.phase = 'target';
+      this.target = null;
+      this.setHintText();
+      this.hintEl.style.opacity = '1';
+    }
+
+    /* STAGE 2 velocity solve: given the locked landing target and the live
+       pull vector, analytically derive the launch velocity that would land
+       the ball exactly on target at "perfect" pull length (REF_DRAG), then
+       scale that magnitude by the player's actual pull — under/over-pulling
+       under/over-shoots, exactly like a golf-style precision throw. Vertical
+       pull sets arc height; horizontal pull sets side-spin, which the
+       physics engine's Magnus term then curves the flight with. */
+    computeThrowParams(pull, ballStart, target){
+      var eng = this.engine;
+      var pullMag = Math.hypot(pull.x, pull.y);
+      var clampedMag = clamp(pullMag, 0, this.MAX_DRAG);
+      var powerFactor = clampedMag / this.REF_DRAG; // 1.0 == exact reference power (can exceed 1 = overshoot)
+      var arcFactor = pullMag > 0 ? clamp(pull.y / pullMag, 0, 1) : 0.6;
+      var spinFactor = clamp(pull.x / this.MAX_DRAG, -1, 1);
+
+      var dx = target.x - ballStart.x, dy = target.y - ballStart.y;
+      var D = Math.max(20, Math.hypot(dx, dy));
+      var apexHeight = 55 + 220 * clamp(powerFactor, 0, 1) * (0.35 + 0.65*arcFactor);
+      var vz0 = Math.sqrt(2 * eng.GRAVITY * apexHeight);
+      var T = Math.max(0.18, 2 * vz0 / eng.GRAVITY);
+      var refHorizSpeed = D / T;
+      var actualHorizSpeed = refHorizSpeed * powerFactor;
+      var ux = dx / D, uy = dy / D;
+      var m = state.match;
+      var spinSide = (m && m.spin) ? spinFactor : spinFactor * 0.4; // spin toggle affects curve strength, not availability
+      return {
+        vx: ux * actualHorizSpeed, vy: uy * actualHorizSpeed, vz: vz0,
+        spinTop: arcFactor, spinSide: spinSide,
+        power: clamp(powerFactor, 0, 1.3), arcFactor: arcFactor, spinFactor: spinFactor
+      };
+    }
+
+    /* Pure function of (pull, target): deterministically simulates the
+       entire shot with the real physics engine. Calling this twice with the
+       same target + pull always yields the exact same path and outcome, so
+       the preview the player sees IS the shot they'll get. */
+    computeSolution(pull, target){
+      var ballRect = $('ball').getBoundingClientRect();
+      var ballStart = { x: ballRect.left + ballRect.width/2, y: ballRect.top + ballRect.height/2, z:6 };
+      var aiCupsRect = $('ai-cups').getBoundingClientRect();
+      var tableRect = $('table-surface').getBoundingClientRect();
+      var aiCenterY = aiCupsRect.top + aiCupsRect.height/2;
+      var params = this.computeThrowParams(pull, ballStart, target);
+      var cupsEls = qsa('#ai-cups .cup:not(.hit)');
+      var difficulty = state.settings.difficulty || 'normal';
+      var windAccel = { LOW: 0, MED: 36, HIGH: 82 }[state.match ? state.match.wind : 'LOW'] || 0;
+      var sim = this.predictor.simulate({
+        x: ballStart.x, y: ballStart.y, z: ballStart.z,
+        vx: params.vx, vy: params.vy, vz: params.vz,
+        spinTop: params.spinTop, spinSide: params.spinSide
+      }, cupsEls, tableRect, difficulty, windAccel);
+      var last = sim.samples[sim.samples.length - 1];
+      var landErr = Math.hypot(last.x - target.x, last.y - target.y);
+      var releaseQuality = clamp(1 - landErr / 130, 0, 1);
+      return {
+        ballStart: ballStart, target: target, power: params.power, arcFactor: params.arcFactor, spinFactor: params.spinFactor,
+        samples: sim.samples, outcome: sim.outcome, hitCupEl: sim.hitCupEl,
+        finalTarget: { x: sim.finalX, y: sim.finalY }, releaseQuality: releaseQuality,
+        depthRef: { startY: ballStart.y, endY: aiCenterY }
+      };
+    }
+
+    updateStatsHud(sol){
+      if(!sol){ this.statsHudEl.classList.remove('show'); return; }
+      this.statsHudEl.classList.add('show');
+      this.arcFillEl.style.width = Math.round(sol.arcFactor * 100) + '%';
+      var spinPct = sol.spinFactor * 50;
+      this.spinFillEl.style.width = Math.abs(spinPct) + '%';
+      this.spinFillEl.style.left = spinPct >= 0 ? '50%' : (50+spinPct) + '%';
+      var relPct = Math.round(sol.releaseQuality * 100);
+      this.releaseFillEl.style.width = relPct + '%';
+      this.releaseReadoutEl.textContent = relPct + '% ' + (sol.outcome === 'hit' ? 'ON TARGET' : (relPct > 70 ? 'CLOSE' : 'OFF LINE'));
+      this.releaseReadoutEl.style.color = sol.outcome === 'hit' ? '#39ff8c' : (relPct > 70 ? '#ffd23f' : '#ff5566');
+    }
+
+    updateVisuals(){
+      var difficulty = state.settings.difficulty || 'normal';
+      if(this.phase === 'target'){
+        this.moveCrosshair(this.current, false);
+        this.svgEl.innerHTML = '';
+        this.statsHudEl.classList.remove('show');
+        this.predictor.highlightTargetCup('#ai-cups', null, difficulty);
+        $('power-fill').style.height = '0%';
+        $('power-readout').textContent = '0%';
+        this.hintEl.style.opacity = '1';
+        return;
+      }
+      var pull = { x: this.current.x - this.ballStart.x, y: this.current.y - this.ballStart.y };
+      var mag = Math.hypot(pull.x, pull.y);
+      var valid = pull.y > 6 && mag > this.MIN_DRAG; // must pull backward (down/away), like a slingshot
+      var sol = valid ? this.computeSolution(pull, this.target) : null;
+      this.predictor.renderPreview(this.svgEl, sol, valid ? this.current : null, valid);
+      this.updateStatsHud(sol);
+      if(sol){
+        var pwrPct = Math.round(clamp(sol.power, 0, 1) * 100);
+        $('power-fill').style.height = pwrPct + '%';
+        $('power-readout').textContent = pwrPct + '%';
+        this.predictor.highlightTargetCup('#ai-cups', sol, difficulty);
+        this.hintEl.style.opacity = '0';
+      } else {
+        $('power-fill').style.height = '0%';
+        $('power-readout').textContent = '0%';
+        this.predictor.highlightTargetCup('#ai-cups', null, difficulty);
+        this.hintEl.style.opacity = mag > 0 ? '1' : '0';
+      }
+    }
+
+    _bindPointerEvents(){
+      var self = this;
+      this.layerEl.addEventListener('pointerdown', function(e){
+        if(!self.isReady()) return;
+        var pt = { x: e.clientX, y: e.clientY };
+
+        if(self.phase === 'power'){
+          // In stage 2: a pointerdown far from the ball re-opens targeting
+          // instead of arming a pull, so the player can always re-aim.
+          var ballRect = $('ball').getBoundingClientRect();
+          var bx = ballRect.left + ballRect.width/2, by = ballRect.top + ballRect.height/2;
+          var distFromBall = Math.hypot(pt.x - bx, pt.y - by);
+          if(distFromBall > 140){
+            self.phase = 'target';
+            self.target = null;
+            self.setHintText();
+          }
+        }
+
+        self.active = true;
+        self.pointerId = e.pointerId;
+        try{ self.layerEl.setPointerCapture(e.pointerId); }catch(err){}
+
+        if(self.phase === 'target'){
+          self.current = self.tableClampedPoint(pt);
+        } else {
+          var ballRect2 = $('ball').getBoundingClientRect();
+          self.ballStart = { x: ballRect2.left + ballRect2.width/2, y: ballRect2.top + ballRect2.height/2 };
+          self.current = pt;
+        }
+        self.updateVisuals();
+        e.preventDefault();
+      });
+
+      this.layerEl.addEventListener('pointermove', function(e){
+        if(!self.active || e.pointerId !== self.pointerId) return;
+        self.current = self.phase === 'target' ? self.tableClampedPoint({ x: e.clientX, y: e.clientY }) : { x: e.clientX, y: e.clientY };
+        self.updateVisuals();
+        e.preventDefault();
+      });
+
+      function release(e){
+        if(!self.active || e.pointerId !== self.pointerId) return;
+        self.active = false;
+        try{ self.layerEl.releasePointerCapture(e.pointerId); }catch(err){}
+        if(!self.isReady()){ self.reset(); return; }
+
+        if(self.phase === 'target'){
+          // Lock stage 1: crosshair becomes the fixed landing target, advance to stage 2.
+          self.target = self.current || self.defaultTarget();
+          self.phase = 'power';
+          self.moveCrosshair(self.target, true);
+          self.setHintText();
+          self.hintEl.style.opacity = '1';
+          self.svgEl.innerHTML = '';
+          SFX.click();
+          return;
+        }
+
+        // phase === 'power' -> attempt to throw
+        var pull = { x: self.current.x - self.ballStart.x, y: self.current.y - self.ballStart.y };
+        var mag = Math.hypot(pull.x, pull.y);
+        var target = self.target;
+        if(pull.y <= 6 || mag < self.MIN_DRAG){
+          // too small / wrong direction — cancel this pull, stay armed on the same locked target
+          self.svgEl.innerHTML = '';
+          self.statsHudEl.classList.remove('show');
+          $('power-fill').style.height = '0%';
+          $('power-readout').textContent = '0%';
+          return;
+        }
+        var sol = self.computeSolution(pull, target);
+        self.reset();
+        var m = state.match;
+        var wasTrick = !!m.trickArmed;
+        m.trickArmed = false;
+        updateTrickButtonArmedUI(false);
+        Thrower.performPlayerThrow(sol, wasTrick);
+      }
+      this.layerEl.addEventListener('pointerup', release);
+      this.layerEl.addEventListener('pointercancel', function(e){
+        self.active = false;
+        if(self.phase === 'power' && self.target){
+          // keep the locked target armed, just drop the in-progress pull
+          self.svgEl.innerHTML = '';
+          self.statsHudEl.classList.remove('show');
+        } else {
+          self.reset();
+        }
+      });
+    }
+  }
+
+  class ThrowController {
+    constructor(engine, predictor){
+      this.engine = engine;
+      this.predictor = predictor;
+      this.DIFF_AI_HIT = { easy:0.30, normal:0.44, hard:0.58 };
+    }
+
+    /* Projects the simulated 3D (x,y,z) point back onto the existing 2D DOM
+       ball element: z becomes a vertical lift (the arc), and a depth scale
+       mirrors the table's foreshortening. Markup/CSS/visuals untouched. */
+    _projectBallVisual(pt, depthRef){
+      var ball = $('ball');
+      var scaleDepth = 1;
+      if(depthRef){
+        var span = Math.max(40, depthRef.startY - depthRef.endY);
+        var t = clamp((depthRef.startY - pt.y) / span, 0, 1);
+        scaleDepth = 1 - t*0.6;
+      }
+      var lift = pt.z * 0.85;
+      ball.style.left = (pt.x - this.engine.BALL_R) + 'px';
+      ball.style.top = (pt.y - this.engine.BALL_R) + 'px';
+      ball.style.transform = 'translateY(-' + lift.toFixed(1) + 'px) scale(' + scaleDepth.toFixed(3) + ')';
+    }
+
+    /* Plays back the already-resolved, deterministic sample set at a fixed
+       physics sample rate, decoupled from render FPS — rAF only decides
+       WHEN we sample the precomputed path, it never re-simulates or varies
+       the underlying physics with frame rate. Long settle-outs are visually
+       capped so gameplay never stalls — the outcome was already decided the
+       instant the shot was simulated. */
+    playback(samples, dt, depthRef){
+      var self = this;
+      return new Promise(function(resolve){
+        var startTime = null;
+        var totalMs = (samples.length - 1) * dt * 1000;
+        var playMs = Math.min(totalMs, 2500);
+        function frame(ts){
+          if(startTime === null) startTime = ts;
+          var elapsed = ts - startTime;
+          var simTime = Math.min(elapsed, playMs);
+          var idxF = (simTime/1000) / dt;
+          var i0 = Math.min(samples.length-1, Math.floor(idxF));
+          var i1 = Math.min(samples.length-1, i0+1);
+          var frac = idxF - i0;
+          var a = samples[i0], b = samples[i1];
+          self._projectBallVisual({ x: a.x+(b.x-a.x)*frac, y: a.y+(b.y-a.y)*frac, z: a.z+(b.z-a.z)*frac }, depthRef);
+          if(elapsed < playMs){
+            requestAnimationFrame(frame);
+          } else {
+            self._projectBallVisual(samples[samples.length - 1], depthRef);
+            resolve();
+          }
+        }
+        requestAnimationFrame(frame);
+      });
+    }
+
+    /* Trick shot: rather than overriding the outcome by fiat, this analytically
+       aims dead-center at the intended cup and resolves it through the exact
+       same deterministic physics as any other throw — the reward is precise
+       aim, not hidden randomness. */
+    computeTrickSolution(sol){
+      var cupsEls = qsa('#ai-cups .cup:not(.hit)');
+      if(!cupsEls.length) return sol;
+      var target = sol.hitCupEl;
+      if(!target){
+        var last = sol.samples[sol.samples.length - 1];
+        var nd = Infinity;
+        cupsEls.forEach(function(c){
+          var r = c.getBoundingClientRect(); var cx = r.left+r.width/2, cy = r.top+r.height/2;
+          var d = Math.hypot(cx-last.x, cy-last.y);
+          if(d < nd){ nd = d; target = c; }
+        });
+      }
+      var r = target.getBoundingClientRect();
+      var tx = r.left + r.width/2, ty = r.top + r.height/2;
+      var ballStart = sol.ballStart;
+      var tableRect = $('table-surface').getBoundingClientRect();
+      var apexHeight = 150;
+      var vz0 = Math.sqrt(2 * this.engine.GRAVITY * apexHeight);
+      var T = 2 * vz0 / this.engine.GRAVITY;
+      var difficulty = state.settings.difficulty || 'normal';
+      var sim = this.predictor.simulate({
+        x: ballStart.x, y: ballStart.y, z: ballStart.z,
+        vx: (tx-ballStart.x)/T, vy: (ty-ballStart.y)/T, vz: vz0,
+        spinTop: 0.8, spinSide: 0
+      }, cupsEls, tableRect, difficulty, 0);
+      return {
+        ballStart: ballStart, samples: sim.samples, outcome: sim.outcome,
+        hitCupEl: sim.hitCupEl || target, depthRef: sol.depthRef
+      };
+    }
+
+    performPlayerThrow(sol, isTrick){
+      var m = state.match;
+      m.busy = true;
+      m.attempts++;
+
+      var remainingCups = qsa('#ai-cups .cup:not(.hit)');
+      if(!remainingCups.length){ finishMatch('win'); m.busy = false; return; }
+
+      var finalSol = isTrick ? this.computeTrickSolution(sol) : sol;
+      var willHit = finalSol.outcome === 'hit' && !!finalSol.hitCupEl;
+      var self = this;
+
+      this.playback(finalSol.samples, this.engine.DT, finalSol.depthRef).then(function(){
+        if(willHit){
+          m.hits++;
+          finalSol.hitCupEl.classList.add('hit');
+          m.aiRemaining--;
+          m.trickMeter = clamp(m.trickMeter + (isTrick ? 0 : 16), 0, 100);
+          if(isTrick){
+            m.trickMeter = 0;
+            var bonusRemaining = qsa('#ai-cups .cup:not(.hit)');
+            if(bonusRemaining.length){
+              var bonus = bonusRemaining[0];
+              bonus.classList.add('hit');
+              m.aiRemaining--;
+            }
+            SFX.trick();
+            toast('TRICK SHOT! DOUBLE HIT');
+            haptic(40);
+          } else {
+            SFX.hit();
+            toast('CUP DESTROYED');
+            haptic(20);
+          }
+        } else {
+          SFX.miss();
+          toast(self.predictor.grazedRim(finalSol) ? 'RIM OUT — SO CLOSE' : 'SHOT MISSED');
+        }
+        resetBallPosition('player');
+        updateGameHUD();
+
+        if(m.aiRemaining <= 0){ finishMatch('win'); m.busy=false; return; }
+
+        m.turn = 'ai';
+        m.busy = false;
+        setTimeout(function(){ self.performAiThrow(); }, 900);
+      });
+    }
+
+    /* AI opponent: randomness here decides the AI's aim quality (its
+       in-game "skill" per difficulty) — that's opponent behavior, not the
+       physics. Whatever aim point the AI ends up choosing is then resolved
+       by the exact same deterministic physics engine used for the player. */
+    performAiThrow(){
+      var m = state.match;
+      if(!m || !m.active || m.paused || m.autoPaused) return;
+      m.busy = true;
+      resetBallPosition('ai');
+      var diffChance = this.DIFF_AI_HIT[state.settings.difficulty] || 0.44;
+      var aimsWell = Math.random() < diffChance;
+      var remainingCups = qsa('#player-cups .cup:not(.hit)');
+      var target = remainingCups.length ? pick(remainingCups) : null;
+      if(!target){ finishMatch('lose'); m.busy=false; return; }
+
+      var ballRect = $('ball').getBoundingClientRect();
+      var ballStart = { x: ballRect.left + ballRect.width/2, y: ballRect.top + ballRect.height/2, z:6 };
+      var tr = target.getBoundingClientRect();
+      var tx = tr.left + tr.width/2, ty = tr.top + tr.height/2;
+      if(!aimsWell){
+        // A deterministic-per-cup miss offset (not per-throw random) —
+        // the imperfection is the AI's aim, not the physics resolving it.
+        var offAngle = ((Number(target.dataset.idx) * 47) % 360) * Math.PI/180;
+        tx += Math.cos(offAngle) * 46;
+        ty += Math.sin(offAngle) * 20;
+      }
+      var apexHeight = 140;
+      var vz0 = Math.sqrt(2 * this.engine.GRAVITY * apexHeight);
+      var T = 2 * vz0 / this.engine.GRAVITY;
+      var cupsEls = qsa('#player-cups .cup:not(.hit)');
+      var tableRect = $('table-surface').getBoundingClientRect();
+      var difficulty = state.settings.difficulty || 'normal';
+      var sim = this.predictor.simulate({
+        x: ballStart.x, y: ballStart.y, z: ballStart.z,
+        vx: (tx-ballStart.x)/T, vy: (ty-ballStart.y)/T, vz: vz0,
+        spinTop: 0.5, spinSide: 0
+      }, cupsEls, tableRect, difficulty, 0);
+      var playerCupsRect = $('player-cups').getBoundingClientRect();
+      var depthRef = { startY: ballStart.y, endY: playerCupsRect.top + playerCupsRect.height/2 };
+      var self = this;
+
+      this.playback(sim.samples, this.engine.DT, depthRef).then(function(){
+        if(sim.outcome === 'hit' && sim.hitCupEl){
+          sim.hitCupEl.classList.add('hit');
+          m.playerRemaining--;
+          SFX.hit();
+          toast('AI SCORES');
+          haptic(20);
+        } else {
+          SFX.miss();
+          toast('AI MISSED');
+        }
+        resetBallPosition('player');
+        updateGameHUD();
+
+        if(m.playerRemaining <= 0){ finishMatch('lose'); m.busy=false; return; }
+
+        m.turn = 'player';
+        m.busy = false;
+      });
+    }
+  }
+
+  /* ---- Module wiring: instantiate the five components once, then expose
+     the small set of entry points the rest of the app already calls
+     (resetBallPosition, sizeAimSvg, resetAimHud) plus the throw/trick
+     buttons, so nothing outside this block needs to change. ---- */
+  var Physics = new BeerPongPhysicsEngine();
+  var Predictor = new TrajectoryPredictor(Physics);
+  var Thrower = new ThrowController(Physics, Predictor);
+  var Aim = new AimController(Physics, Predictor);
+
+  function sizeAimSvg(){ Aim.resizeSvg(); }
+  window.addEventListener('resize', sizeAimSvg);
+
+  function resetAimHud(){ Aim.reset(); }
+
+  $('btn-throw').addEventListener('click', function(){
+    var m = state.match;
+    if(!m || !m.active) return;
+    toast(Aim.phase === 'target' ? 'DRAG TO PLACE YOUR CROSSHAIR TARGET' : 'PULL BACK & RELEASE TO THROW');
+    SFX.click();
+  });
+
+  function updateTrickButtonArmedUI(on){
+    $('btn-trick-shot').classList.toggle('trick-armed', !!on);
+  }
+
+  $('btn-trick-shot').addEventListener('click', function(){
+    var m = state.match;
+    if(!m || !m.active || m.paused || m.autoPaused || m.busy || m.turn !== 'player') return;
+    if(m.trickMeter < 100){ toast('TRICK METER CHARGING'); SFX.miss(); return; }
+    m.trickArmed = !m.trickArmed;
+    updateTrickButtonArmedUI(m.trickArmed);
+    toast(m.trickArmed ? 'TRICK SHOT ARMED — PULL BACK & RELEASE' : 'TRICK SHOT DISARMED');
+    SFX.click();
+  });
+
+  /* ================= GAME: HUD ADJUSTMENTS ================= */
+  qsa('[data-adjust]').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      var m = state.match;
+      if(!m || !m.active) return;
+      var type = btn.getAttribute('data-adjust');
+      SFX.click();
+      if(type === 'wind'){
+        m.wind = m.wind === 'LOW' ? 'MED' : (m.wind === 'MED' ? 'HIGH' : 'LOW');
+        $('wind-value').textContent = m.wind;
+        toast('WIND SHIFTED: ' + m.wind);
+      } else if(type === 'spin'){
+        m.spin = !m.spin;
+        $('spin-value').textContent = m.spin ? 'ON' : 'OFF';
+        toast('CURVE CONTROL ' + (m.spin ? 'ENGAGED' : 'DISENGAGED'));
+      } else if(type === 'sens'){
+        openPanel('panel-settings');
+      }
+    });
+  });
+
+  /* ================= GAME: QUICK ACCESS BUTTONS ================= */
+  $('btn-quick-loadout').addEventListener('click', function(){ openPanel('panel-loadout'); });
+  $('btn-quick-log').addEventListener('click', function(){ openPanel('panel-log'); });
+  $('btn-quick-profile').addEventListener('click', function(){ openPanel('panel-profile'); });
+  $('btn-open-settings-game').addEventListener('click', function(){ openPanel('panel-settings'); });
+
+  /* ================= PAUSE MENU ================= */
+  $('btn-pause').addEventListener('click', function(){
+    var m = state.match;
+    if(!m || !m.active) return;
+    m.paused = true;
+    openModal('modal-pause');
+    SFX.open();
+  });
+  $('btn-resume').addEventListener('click', function(){
+    if(state.match) state.match.paused = false;
+    closeModal('modal-pause');
+    SFX.close();
+  });
+  $('btn-restart').addEventListener('click', function(){
+    closeModal('modal-pause');
+    var m = state.match;
+    endMatchCleanup();
+    startMatch(m.mode, m.opponent);
+  });
+  $('btn-pause-settings').addEventListener('click', function(){ openPanel('panel-settings'); });
+  $('btn-quit').addEventListener('click', function(){
+    closeModal('modal-pause');
+    endMatchCleanup();
+    renderProfile();
+    showScreen('screen-menu');
+  });
+
+  /* ================= GAME OVER ================= */
+  function finishMatch(result){
+    var m = state.match;
+    endMatchCleanup();
+    var playerScore = 10 - m.aiRemaining;
+    var aiScore = 10 - m.playerRemaining;
+
+    var icon = $('go-icon'), title = $('go-title'), sub = $('go-subtitle');
+    if(result === 'win'){
+      icon.textContent = 'emoji_events'; icon.className = 'material-symbols-outlined text-5xl fill-icon text-primary neon-text';
+      title.textContent = 'VICTORY'; title.className = 'font-display text-2xl italic-techno tracking-widest text-primary neon-text';
+      sub.textContent = 'Arena Cleared';
+      state.profile.wins++; state.profile.streak++;
+      SFX.win(); haptic(60);
+    } else if(result === 'lose'){
+      icon.textContent = 'dangerous'; icon.className = 'material-symbols-outlined text-5xl fill-icon text-magenta';
+      title.textContent = 'DEFEAT'; title.className = 'font-display text-2xl italic-techno tracking-widest text-magenta';
+      sub.textContent = 'Core Breached';
+      state.profile.losses++; state.profile.streak = 0;
+      SFX.lose(); haptic(60);
+    } else {
+      icon.textContent = 'balance'; icon.className = 'material-symbols-outlined text-5xl fill-icon text-secondary-light';
+      title.textContent = 'DRAW'; title.className = 'font-display text-2xl italic-techno tracking-widest text-secondary-light';
+      sub.textContent = 'Stalemate Protocol';
+    }
+    $('go-score').textContent = playerScore + ' : ' + aiScore;
+    $('go-xp').textContent = '+' + (result === 'win' ? 240 : result === 'lose' ? 60 : 120);
+
+    state.matchHistory.unshift({
+      opp: m.opponent,
+      result: result === 'win' ? 'W' : (result === 'lose' ? 'L' : 'D'),
+      score: playerScore + '-' + aiScore,
+      mode: m.mode.toUpperCase()
+    });
+    if(state.matchHistory.length > 20) state.matchHistory.pop();
+
+    renderProfile();
+    renderLog();
+    openModal('modal-gameover');
+  }
+
+  $('btn-rematch').addEventListener('click', function(){
+    closeModal('modal-gameover');
+    var last = state.matchHistory[0];
+    startMatch(state.match ? state.match.mode : 'quick', last ? last.opp : 'CYBER_VOID');
+  });
+  $('btn-gameover-menu').addEventListener('click', function(){
+    closeModal('modal-gameover');
+    showScreen('screen-menu');
+  });
+
+  /* ================= PARTICLES ================= */
+  function spawnParticles(container, count){
+    var el = $(container);
+    if(!el) return;
+    for(var i=0;i<count;i++){
+      var p = document.createElement('div');
+      p.className = 'particle';
+      var size = rand(2,5);
+      p.style.width = size + 'px';
+      p.style.height = size + 'px';
+      p.style.left = rand(0,100) + '%';
+      p.style.top = rand(20,100) + '%';
+      p.style.animationDuration = rand(6,14) + 's';
+      p.style.animationDelay = rand(0,8) + 's';
+      el.appendChild(p);
+    }
+  }
+
+  /* ================= BOOT SEQUENCE ================= */
+  function runBoot(){
+    var bar = $('boot-bar');
+    var label = $('boot-label');
+    var labels = ['Initializing systems...', 'Calibrating optics...', 'Syncing arena grid...', 'Loading pilot data...', 'Ready.'];
+    var pct = 0;
+    var li = 0;
+    var handle = setInterval(function(){
+      pct += rand(6, 14);
+      if(pct >= 100){ pct = 100; }
+      bar.style.width = pct + '%';
+      var newLi = Math.min(labels.length-1, Math.floor((pct/100) * (labels.length-1)));
+      if(newLi !== li){ li = newLi; label.textContent = labels[li]; }
+      if(pct >= 100){
+        clearInterval(handle);
+        setTimeout(function(){ enterMenu(); }, 300);
+      }
+    }, 180);
+    $('screen-boot').addEventListener('click', function(){
+      clearInterval(handle);
+      enterMenu();
+    }, { once:true });
+  }
+  var enteredMenu = false;
+  function enterMenu(){
+    if(enteredMenu) return;
+    enteredMenu = true;
+    showScreen('screen-menu');
+  }
+
+  /* ================= INIT ================= */
+  function init(){
+    spawnParticles('boot-particles', 22);
+    spawnParticles('game-particles', 16);
+    buildCups();
+    renderProfile();
+    renderLog();
+    renderBracket();
+    renderLobby();
+    renderSkins();
+    renderArenas();
+    applyArenaTheme(state.loadout.arena);
+    runDiagnostics();
+    syncSettingsUI();
+    document.documentElement.style.setProperty('--ball-color', '#00f3ff');
+    sizeAimSvg();
+    runBoot();
+  }
+
+  document.addEventListener('DOMContentLoaded', init);
+})();
+</script>
+</body>
+</html>

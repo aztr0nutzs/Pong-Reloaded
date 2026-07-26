@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+  body { margin: 0; padding: 0; }
+  #table-perspective {
+    width: 400px; height: 800px;
+    perspective: 1300px; perspective-origin: 50% 0%;
+    display: flex; align-items: flex-end; justify-content: center;
+  }
+  #table-surface {
+    width: 300px; height: 1200px;
+    transform: rotateX(50deg) translateY(0) translateZ(-50px);
+    transform-origin: center bottom;
+    background: red;
+  }
+</style>
+</head>
+<body>
+  <div id="table-perspective">
+    <div id="table-surface"></div>
+  </div>
+  <script>
+    const rect = document.getElementById('table-surface').getBoundingClientRect();
+    console.log(JSON.stringify(rect));
+  </script>
+</body>
+</html>

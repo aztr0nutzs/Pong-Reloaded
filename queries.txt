@@ -1,0 +1,2025 @@
+app/src/main/assets/js/modules/AIController.js:
+app/src/main/assets/js/modules/AIController.js:class AIController {
+app/src/main/assets/js/modules/AIController.js:    constructor(engine, predictor, thrower) {
+app/src/main/assets/js/modules/AIController.js:        this.engine = engine;
+app/src/main/assets/js/modules/AIController.js:        this.predictor = predictor;
+app/src/main/assets/js/modules/AIController.js:        this.thrower = thrower;
+app/src/main/assets/js/modules/AIController.js:        this.DIFF_AI_HIT = { easy:0.30, normal:0.44, hard:0.58 };
+app/src/main/assets/js/modules/AIController.js:    }
+app/src/main/assets/js/modules/AIController.js:    
+app/src/main/assets/js/modules/AIController.js:    /* AI opponent: randomness here decides the AI's aim quality (its
+app/src/main/assets/js/modules/AIController.js:       in-game "skill" per difficulty) — that's opponent behavior, not the
+app/src/main/assets/js/modules/AIController.js:       physics. Whatever aim point the AI ends up choosing is then resolved
+app/src/main/assets/js/modules/AIController.js:       by the exact same deterministic physics engine used for the player. */
+app/src/main/assets/js/modules/AIController.js:    performAiThrow(){
+app/src/main/assets/js/modules/AIController.js:      var m = state.match;
+app/src/main/assets/js/modules/AIController.js:      if(!m || !m.active || m.paused || m.autoPaused) return;
+app/src/main/assets/js/modules/AIController.js:      m.busy = true;
+app/src/main/assets/js/modules/AIController.js:      resetBallPosition('ai');
+app/src/main/assets/js/modules/AIController.js:      var diffChance = this.DIFF_AI_HIT[state.settings.difficulty] || 0.44;
+app/src/main/assets/js/modules/AIController.js:      var aimsWell = Math.random() < diffChance;
+app/src/main/assets/js/modules/AIController.js:      var remainingCups = qsa('#player-cups .cup:not(.hit)');
+app/src/main/assets/js/modules/AIController.js:      var target = remainingCups.length ? pick(remainingCups) : null;
+app/src/main/assets/js/modules/AIController.js:      if(!target){ finishMatch('lose'); m.busy=false; return; }
+app/src/main/assets/js/modules/AIController.js:
+app/src/main/assets/js/modules/AIController.js:      var ballRect = $('ball').getBoundingClientRect();
+app/src/main/assets/js/modules/AIController.js:      var ballStart = { x: ballRect.left + ballRect.width/2, y: ballRect.top + ballRect.height/2, z:6 };
+app/src/main/assets/js/modules/AIController.js:      var tr = target.getBoundingClientRect();
+app/src/main/assets/js/modules/AIController.js:      var tx = tr.left + tr.width/2, ty = tr.top + tr.height/2;
+app/src/main/assets/js/modules/AIController.js:      if(!aimsWell){
+app/src/main/assets/js/modules/AIController.js:        // A deterministic-per-cup miss offset (not per-throw random) —
+app/src/main/assets/js/modules/AIController.js:        // the imperfection is the AI's aim, not the physics resolving it.
+app/src/main/assets/js/modules/AIController.js:        var offAngle = ((Number(target.dataset.idx) * 47) % 360) * Math.PI/180;
+app/src/main/assets/js/modules/AIController.js:        tx += Math.cos(offAngle) * 46;
+app/src/main/assets/js/modules/AIController.js:        ty += Math.sin(offAngle) * 20;
+app/src/main/assets/js/modules/AIController.js:      }
+app/src/main/assets/js/modules/AIController.js:      var apexHeight = 140;
+app/src/main/assets/js/modules/AIController.js:      var vz0 = Math.sqrt(2 * this.engine.GRAVITY * apexHeight);
+app/src/main/assets/js/modules/AIController.js:      var T = 2 * vz0 / this.engine.GRAVITY;
+app/src/main/assets/js/modules/AIController.js:      var cupsEls = qsa('#player-cups .cup:not(.hit)');
+app/src/main/assets/js/modules/AIController.js:      var tableRect = $('table-surface').getBoundingClientRect();
+app/src/main/assets/js/modules/AIController.js:      var difficulty = state.settings.difficulty || 'normal';
+app/src/main/assets/js/modules/AIController.js:      var sim = this.predictor.simulate({
+app/src/main/assets/js/modules/AIController.js:        x: ballStart.x, y: ballStart.y, z: ballStart.z,
+app/src/main/assets/js/modules/AIController.js:        vx: (tx-ballStart.x)/T, vy: (ty-ballStart.y)/T, vz: vz0,
+app/src/main/assets/js/modules/AIController.js:        angularVelocityX: 0.5, angularVelocityZ: 0
+app/src/main/assets/js/modules/AIController.js:      }, cupsEls, tableRect, difficulty, 0);
+app/src/main/assets/js/modules/AIController.js:      var playerCupsRect = $('player-cups').getBoundingClientRect();
+app/src/main/assets/js/modules/AIController.js:      var depthRef = { startY: ballStart.y, endY: playerCupsRect.top + playerCupsRect.height/2 };
+app/src/main/assets/js/modules/AIController.js:      var self = this;
+app/src/main/assets/js/modules/AIController.js:
+app/src/main/assets/js/modules/AIController.js:      this.thrower.playback.bind(this.thrower)(sim.samples, this.engine.DT, depthRef).then(function(){
+app/src/main/assets/js/modules/AIController.js:        if(sim.outcome === 'hit' && sim.hitCupEl){
+app/src/main/assets/js/modules/AIController.js:          sim.hitCupEl.classList.add('hit');
+app/src/main/assets/js/modules/AIController.js:          m.playerRemaining--;
+app/src/main/assets/js/modules/AIController.js:          SFX.hit();
+app/src/main/assets/js/modules/AIController.js:          toast('AI SCORES');
+app/src/main/assets/js/modules/AIController.js:          haptic(20);
+app/src/main/assets/js/modules/AIController.js:        } else {
+app/src/main/assets/js/modules/AIController.js:          SFX.miss();
+app/src/main/assets/js/modules/AIController.js:          toast('AI MISSED');
+app/src/main/assets/js/modules/AIController.js:        }
+app/src/main/assets/js/modules/AIController.js:        resetBallPosition('player');
+app/src/main/assets/js/modules/AIController.js:        
+app/src/main/assets/js/modules/AIController.js:
+app/src/main/assets/js/modules/AIController.js:        if(m.playerRemaining <= 0){ finishMatch('lose'); m.busy=false; return; }
+app/src/main/assets/js/modules/AIController.js:
+app/src/main/assets/js/modules/AIController.js:        m.turn = 'player';
+app/src/main/assets/js/modules/AIController.js:        m.busy = false;
+app/src/main/assets/js/modules/AIController.js:      });
+app/src/main/assets/js/modules/AIController.js:    }
+app/src/main/assets/js/modules/AIController.js:}
+app/src/main/assets/js/modules/AIController.js:window.AIController = AIController;
+app/src/main/assets/js/modules/AudioController.js:
+app/src/main/assets/js/modules/AudioController.js:class AudioController {
+app/src/main/assets/js/modules/AudioController.js:    constructor() {
+app/src/main/assets/js/modules/AudioController.js:        this.audioCtx = null;
+app/src/main/assets/js/modules/AudioController.js:    }
+app/src/main/assets/js/modules/AudioController.js:    
+app/src/main/assets/js/modules/AudioController.js:    ctx() {
+app/src/main/assets/js/modules/AudioController.js:        if(!this.audioCtx){
+app/src/main/assets/js/modules/AudioController.js:            try { this.audioCtx = null; } catch(e){ this.audioCtx = null; }
+app/src/main/assets/js/modules/AudioController.js:        }
+app/src/main/assets/js/modules/AudioController.js:        if(this.audioCtx && this.audioCtx.state === 'suspended') this.audioCtx.resume();
+app/src/main/assets/js/modules/AudioController.js:        return this.audioCtx;
+app/src/main/assets/js/modules/AudioController.js:    }
+app/src/main/assets/js/modules/AudioController.js:
+app/src/main/assets/js/modules/AudioController.js:    playOsc(type, freq, dur, vol, slideFreq) {
+app/src/main/assets/js/modules/AudioController.js:        if(!state.settings.sound) return;
+app/src/main/assets/js/modules/AudioController.js:        var cx = this.ctx();
+app/src/main/assets/js/modules/AudioController.js:        if(!cx) return;
+app/src/main/assets/js/modules/AudioController.js:        var osc = cx.createOscillator();
+app/src/main/assets/js/modules/AudioController.js:        var gain = cx.createGain();
+app/src/main/assets/js/modules/AudioController.js:        osc.type = type;
+app/src/main/assets/js/modules/AudioController.js:        osc.connect(gain);
+app/src/main/assets/js/modules/AudioController.js:        gain.connect(cx.destination);
+app/src/main/assets/js/modules/AudioController.js:        osc.frequency.setValueAtTime(freq, cx.currentTime);
+app/src/main/assets/js/modules/AudioController.js:        if(slideFreq) osc.frequency.exponentialRampToValueAtTime(slideFreq, cx.currentTime + dur);
+app/src/main/assets/js/modules/AudioController.js:        gain.gain.setValueAtTime(vol, cx.currentTime);
+app/src/main/assets/js/modules/AudioController.js:        gain.gain.exponentialRampToValueAtTime(0.01, cx.currentTime + dur);
+app/src/main/assets/js/modules/AudioController.js:        osc.start();
+app/src/main/assets/js/modules/AudioController.js:        osc.stop(cx.currentTime + dur);
+app/src/main/assets/js/modules/AudioController.js:    }
+app/src/main/assets/js/modules/AudioController.js:    
+app/src/main/assets/js/modules/AudioController.js:    haptic(ms) {
+app/src/main/assets/js/modules/AudioController.js:        if(state.settings.haptics && navigator.vibrate) console.log("vibrate", ms);
+app/src/main/assets/js/modules/AudioController.js:    }
+app/src/main/assets/js/modules/AudioController.js:    
+app/src/main/assets/js/modules/AudioController.js:    click() { this.playOsc('square', 800, 0.05, 0.02); }
+app/src/main/assets/js/modules/AudioController.js:    hover() { this.playOsc('sine', 1200, 0.03, 0.01); }
+app/src/main/assets/js/modules/AudioController.js:    open()  { this.playOsc('triangle', 300, 0.1, 0.03, 600); }
+app/src/main/assets/js/modules/AudioController.js:    close() { this.playOsc('triangle', 600, 0.1, 0.03, 300); }
+app/src/main/assets/js/modules/AudioController.js:    hit()   { this.playOsc('square', 150, 0.15, 0.08, 50); this.playOsc('sawtooth', 800, 0.2, 0.04); }
+app/src/main/assets/js/modules/AudioController.js:    miss()  { this.playOsc('sawtooth', 200, 0.3, 0.05, 100); }
+app/src/main/assets/js/modules/AudioController.js:    trick() { this.playOsc('square', 400, 0.3, 0.06, 1200); this.playOsc('sawtooth', 800, 0.3, 0.04, 2400); }
+app/src/main/assets/js/modules/AudioController.js:    win()   { this.playOsc('square', 400, 0.1, 0.05); setTimeout(()=>this.playOsc('square', 600, 0.1, 0.05), 150); setTimeout(()=>this.playOsc('square', 800, 0.4, 0.05), 300); }
+app/src/main/assets/js/modules/AudioController.js:    lose()  { this.playOsc('sawtooth', 300, 0.4, 0.05, 100); }
+app/src/main/assets/js/modules/AudioController.js:}
+app/src/main/assets/js/modules/AudioController.js:
+app/src/main/assets/js/modules/AudioController.js:const audio = new AudioController();
+app/src/main/assets/js/modules/AudioController.js:window.haptic = audio.haptic.bind(audio);
+app/src/main/assets/js/modules/AudioController.js:window.SFX = {
+app/src/main/assets/js/modules/AudioController.js:    click: audio.click.bind(audio),
+app/src/main/assets/js/modules/AudioController.js:    hover: audio.hover.bind(audio),
+app/src/main/assets/js/modules/AudioController.js:    open: audio.open.bind(audio),
+app/src/main/assets/js/modules/AudioController.js:    close: audio.close.bind(audio),
+app/src/main/assets/js/modules/AudioController.js:    hit: audio.hit.bind(audio),
+app/src/main/assets/js/modules/AudioController.js:    miss: audio.miss.bind(audio),
+app/src/main/assets/js/modules/AudioController.js:    trick: audio.trick.bind(audio),
+app/src/main/assets/js/modules/AudioController.js:    win: audio.win.bind(audio),
+app/src/main/assets/js/modules/AudioController.js:    lose: audio.lose.bind(audio)
+app/src/main/assets/js/modules/AudioController.js:};
+app/src/main/assets/js/modules/BallController.js:class BallController {
+app/src/main/assets/js/modules/BallController.js:    
+app/src/main/assets/js/modules/BallController.js:    static resetBallPosition(fromTeam) {
+app/src/main/assets/js/modules/BallController.js:        if (!window.GameStateManager) return;
+app/src/main/assets/js/modules/BallController.js:        var laneEl = fromTeam === 'player' ? document.getElementById('player-cups') : document.getElementById('ai-cups');
+app/src/main/assets/js/modules/BallController.js:        if (!laneEl) return;
+app/src/main/assets/js/modules/BallController.js:        var rect = laneEl.getBoundingClientRect();
+app/src/main/assets/js/modules/BallController.js:        
+app/src/main/assets/js/modules/BallController.js:        var x = rect.left + rect.width/2;
+app/src/main/assets/js/modules/BallController.js:        var y = fromTeam === 'player' ? (rect.bottom - 10) : (rect.top - 10);
+app/src/main/assets/js/modules/BallController.js:        
+app/src/main/assets/js/modules/BallController.js:        let state = GameStateManager.getState();
+app/src/main/assets/js/modules/BallController.js:        state.ball.active = true;
+app/src/main/assets/js/modules/BallController.js:        state.ball.x = x;
+app/src/main/assets/js/modules/BallController.js:        state.ball.y = y;
+app/src/main/assets/js/modules/BallController.js:        state.ball.z = 0;
+app/src/main/assets/js/modules/BallController.js:        state.ball.scaleDepth = 1;
+app/src/main/assets/js/modules/BallController.js:        state.ball.shadowScale = 1;
+app/src/main/assets/js/modules/BallController.js:        state.ball.shadowOpacity = 1;
+app/src/main/assets/js/modules/BallController.js:        
+app/src/main/assets/js/modules/BallController.js:        if (window.Renderer) Renderer.render(state);
+app/src/main/assets/js/modules/BallController.js:    }
+app/src/main/assets/js/modules/BallController.js:
+app/src/main/assets/js/modules/BallController.js:}
+app/src/main/assets/js/modules/BallController.js:window.BallController = BallController;
+app/src/main/assets/js/modules/BallController.js:window.resetBallPosition = BallController.resetBallPosition;
+app/src/main/assets/js/modules/CameraController.js:class CameraController {
+app/src/main/assets/js/modules/CameraController.js:    static setupCamera() {
+app/src/main/assets/js/modules/CameraController.js:        // Enforce elevated end-of-table perspective, static, no zoom, no rotation
+app/src/main/assets/js/modules/CameraController.js:        var perspectiveEl = document.getElementById('table-perspective');
+app/src/main/assets/js/modules/CameraController.js:        var surfaceEl = document.getElementById('table-surface');
+app/src/main/assets/js/modules/CameraController.js:        
+app/src/main/assets/js/modules/CameraController.js:        if (perspectiveEl) {
+app/src/main/assets/js/modules/CameraController.js:            perspectiveEl.style.perspective = '1200px';
+app/src/main/assets/js/modules/CameraController.js:            perspectiveEl.style.webkitPerspective = '1200px';
+app/src/main/assets/js/modules/CameraController.js:            perspectiveEl.style.perspectiveOrigin = '50% 15%';
+app/src/main/assets/js/modules/CameraController.js:            
+app/src/main/assets/js/modules/CameraController.js:            perspectiveEl.style.display = 'flex';
+app/src/main/assets/js/modules/CameraController.js:            perspectiveEl.style.alignItems = 'flex-end';
+app/src/main/assets/js/modules/CameraController.js:            perspectiveEl.style.justifyContent = 'center';
+app/src/main/assets/js/modules/CameraController.js:            perspectiveEl.style.paddingBottom = '10vh';
+app/src/main/assets/js/modules/CameraController.js:        }
+app/src/main/assets/js/modules/CameraController.js:        
+app/src/main/assets/js/modules/CameraController.js:        if (surfaceEl) {
+app/src/main/assets/js/modules/CameraController.js:            surfaceEl.style.transformOrigin = 'center bottom';
+app/src/main/assets/js/modules/CameraController.js:            surfaceEl.style.transform = 'rotateX(55deg) translateY(0%) translateZ(-150px)';
+app/src/main/assets/js/modules/CameraController.js:            surfaceEl.style.transition = 'none'; // Never zoom or rotate
+app/src/main/assets/js/modules/CameraController.js:        }
+app/src/main/assets/js/modules/CameraController.js:    }
+app/src/main/assets/js/modules/CameraController.js:
+app/src/main/assets/js/modules/CameraController.js:    static applyArenaTheme(arenaId) {
+app/src/main/assets/js/modules/CameraController.js:        var a = ARENAS.find(function(x){ return x.id === arenaId; });
+app/src/main/assets/js/modules/CameraController.js:        if(a) document.documentElement.style.setProperty('--primary', a.color);
+app/src/main/assets/js/modules/CameraController.js:    }
+app/src/main/assets/js/modules/CameraController.js:}
+app/src/main/assets/js/modules/CameraController.js:window.CameraController = CameraController;
+app/src/main/assets/js/modules/CameraController.js:window.applyArenaTheme = CameraController.applyArenaTheme;
+app/src/main/assets/js/modules/CupManager.js:
+app/src/main/assets/js/modules/CupManager.js:class CupManager {
+app/src/main/assets/js/modules/CupManager.js:    static buildCups() {
+app/src/main/assets/js/modules/CupManager.js:        CupManager.buildFormation($('ai-cups'), [4,3,2,1], 'ai');
+app/src/main/assets/js/modules/CupManager.js:        CupManager.buildFormation($('player-cups'), [1,2,3,4], 'player');
+app/src/main/assets/js/modules/CupManager.js:    }
+app/src/main/assets/js/modules/CupManager.js:    static buildFormation(container, rowOrder, team) {
+app/src/main/assets/js/modules/CupManager.js:        container.innerHTML = '';
+app/src/main/assets/js/modules/CupManager.js:        var idx = 0;
+app/src/main/assets/js/modules/CupManager.js:        rowOrder.forEach(function(rowSize){
+app/src/main/assets/js/modules/CupManager.js:            var row = document.createElement('div');
+app/src/main/assets/js/modules/CupManager.js:            row.className = 'cup-row';
+app/src/main/assets/js/modules/CupManager.js:            for(var i=0;i<rowSize;i++){
+app/src/main/assets/js/modules/CupManager.js:                var cup = document.createElement('div');
+app/src/main/assets/js/modules/CupManager.js:                cup.className = 'cup cup-' + team;
+app/src/main/assets/js/modules/CupManager.js:                cup.id = team + '-cup-' + idx;
+app/src/main/assets/js/modules/CupManager.js:                cup.dataset.idx = idx;
+app/src/main/assets/js/modules/CupManager.js:                cup.dataset.team = team;
+app/src/main/assets/js/modules/CupManager.js:                var inner = document.createElement('div');
+app/src/main/assets/js/modules/CupManager.js:                inner.className = 'cup-inner';
+app/src/main/assets/js/modules/CupManager.js:                cup.appendChild(inner);
+app/src/main/assets/js/modules/CupManager.js:                row.appendChild(cup);
+app/src/main/assets/js/modules/CupManager.js:                idx++;
+app/src/main/assets/js/modules/CupManager.js:            }
+app/src/main/assets/js/modules/CupManager.js:            container.appendChild(row);
+app/src/main/assets/js/modules/CupManager.js:        });
+app/src/main/assets/js/modules/CupManager.js:    }
+app/src/main/assets/js/modules/CupManager.js:}
+app/src/main/assets/js/modules/CupManager.js:window.CupManager = CupManager;
+app/src/main/assets/js/modules/CupManager.js:window.buildCups = CupManager.buildCups;
+app/src/main/assets/js/modules/CupManager.js:window.buildFormation = CupManager.buildFormation;
+app/src/main/assets/js/modules/EffectsManager.js:
+app/src/main/assets/js/modules/EffectsManager.js:class EffectsManager {
+app/src/main/assets/js/modules/EffectsManager.js:    static spawnParticles(container, count){
+app/src/main/assets/js/modules/EffectsManager.js:        var el = document.getElementById(container);
+app/src/main/assets/js/modules/EffectsManager.js:        if(!el) return;
+app/src/main/assets/js/modules/EffectsManager.js:        el.innerHTML = '';
+app/src/main/assets/js/modules/EffectsManager.js:        
+app/src/main/assets/js/modules/EffectsManager.js:        var canvas = document.createElement('canvas');
+app/src/main/assets/js/modules/EffectsManager.js:        canvas.width = window.innerWidth;
+app/src/main/assets/js/modules/EffectsManager.js:        canvas.height = window.innerHeight;
+app/src/main/assets/js/modules/EffectsManager.js:        canvas.style.position = 'absolute';
+app/src/main/assets/js/modules/EffectsManager.js:        canvas.style.left = '0';
+app/src/main/assets/js/modules/EffectsManager.js:        canvas.style.top = '0';
+app/src/main/assets/js/modules/EffectsManager.js:        canvas.style.pointerEvents = 'none';
+app/src/main/assets/js/modules/EffectsManager.js:        el.appendChild(canvas);
+app/src/main/assets/js/modules/EffectsManager.js:        
+app/src/main/assets/js/modules/EffectsManager.js:        var ctx = canvas.getContext('2d');
+app/src/main/assets/js/modules/EffectsManager.js:        var particles = [];
+app/src/main/assets/js/modules/EffectsManager.js:        
+app/src/main/assets/js/modules/EffectsManager.js:        for(var i=0; i<count * 2; i++){
+app/src/main/assets/js/modules/EffectsManager.js:            particles.push({
+app/src/main/assets/js/modules/EffectsManager.js:                x: Math.random() * canvas.width,
+app/src/main/assets/js/modules/EffectsManager.js:                y: Math.random() * canvas.height + canvas.height * 0.2,
+app/src/main/assets/js/modules/EffectsManager.js:                size: Math.random() * 2 + 1,
+app/src/main/assets/js/modules/EffectsManager.js:                speedY: Math.random() * -0.5 - 0.2,
+app/src/main/assets/js/modules/EffectsManager.js:                speedX: Math.random() * 0.4 - 0.2,
+app/src/main/assets/js/modules/EffectsManager.js:                alpha: Math.random() * 0.5 + 0.1,
+app/src/main/assets/js/modules/EffectsManager.js:                pulseSpeed: Math.random() * 0.05 + 0.01,
+app/src/main/assets/js/modules/EffectsManager.js:                pulseVal: Math.random() * Math.PI * 2
+app/src/main/assets/js/modules/EffectsManager.js:            });
+app/src/main/assets/js/modules/EffectsManager.js:        }
+app/src/main/assets/js/modules/EffectsManager.js:        
+app/src/main/assets/js/modules/EffectsManager.js:        if (!GameStateManager.state.particleSystems) {
+app/src/main/assets/js/modules/EffectsManager.js:            GameStateManager.state.particleSystems = [];
+app/src/main/assets/js/modules/EffectsManager.js:        }
+app/src/main/assets/js/modules/EffectsManager.js:        
+app/src/main/assets/js/modules/EffectsManager.js:        GameStateManager.state.particleSystems.push({
+app/src/main/assets/js/modules/EffectsManager.js:            canvas: canvas,
+app/src/main/assets/js/modules/EffectsManager.js:            ctx: ctx,
+app/src/main/assets/js/modules/EffectsManager.js:            particles: particles
+app/src/main/assets/js/modules/EffectsManager.js:        });
+app/src/main/assets/js/modules/EffectsManager.js:        
+app/src/main/assets/js/modules/EffectsManager.js:        window.addEventListener('resize', function() {
+app/src/main/assets/js/modules/EffectsManager.js:            canvas.width = window.innerWidth;
+app/src/main/assets/js/modules/EffectsManager.js:            canvas.height = window.innerHeight;
+app/src/main/assets/js/modules/EffectsManager.js:        });
+app/src/main/assets/js/modules/EffectsManager.js:    }
+app/src/main/assets/js/modules/EffectsManager.js:    
+app/src/main/assets/js/modules/EffectsManager.js:    static update(dt) {
+app/src/main/assets/js/modules/EffectsManager.js:        if (!GameStateManager.state.particleSystems) return;
+app/src/main/assets/js/modules/EffectsManager.js:        
+app/src/main/assets/js/modules/EffectsManager.js:        for (let sys of GameStateManager.state.particleSystems) {
+app/src/main/assets/js/modules/EffectsManager.js:            let canvas = sys.canvas;
+app/src/main/assets/js/modules/EffectsManager.js:            let particles = sys.particles;
+app/src/main/assets/js/modules/EffectsManager.js:            
+app/src/main/assets/js/modules/EffectsManager.js:            for (var i = 0; i < particles.length; i++) {
+app/src/main/assets/js/modules/EffectsManager.js:                var p = particles[i];
+app/src/main/assets/js/modules/EffectsManager.js:                let dtFactor = dt * 60;
+app/src/main/assets/js/modules/EffectsManager.js:                p.y += p.speedY * dtFactor;
+app/src/main/assets/js/modules/EffectsManager.js:                p.x += p.speedX * dtFactor;
+app/src/main/assets/js/modules/EffectsManager.js:                p.pulseVal += p.pulseSpeed * dtFactor;
+app/src/main/assets/js/modules/EffectsManager.js:                
+app/src/main/assets/js/modules/EffectsManager.js:                if (p.y < -10) {
+app/src/main/assets/js/modules/EffectsManager.js:                    p.y = canvas.height + 10;
+app/src/main/assets/js/modules/EffectsManager.js:                    p.x = Math.random() * canvas.width;
+app/src/main/assets/js/modules/EffectsManager.js:                }
+app/src/main/assets/js/modules/EffectsManager.js:                if (p.x < -10) p.x = canvas.width + 10;
+app/src/main/assets/js/modules/EffectsManager.js:                if (p.x > canvas.width + 10) p.x = -10;
+app/src/main/assets/js/modules/EffectsManager.js:            }
+app/src/main/assets/js/modules/EffectsManager.js:        }
+app/src/main/assets/js/modules/EffectsManager.js:    }
+app/src/main/assets/js/modules/EffectsManager.js:    
+app/src/main/assets/js/modules/EffectsManager.js:    static render(state) {
+app/src/main/assets/js/modules/EffectsManager.js:        if (!state.particleSystems) return;
+app/src/main/assets/js/modules/EffectsManager.js:        
+app/src/main/assets/js/modules/EffectsManager.js:        for (let sys of state.particleSystems) {
+app/src/main/assets/js/modules/EffectsManager.js:            let canvas = sys.canvas;
+app/src/main/assets/js/modules/EffectsManager.js:            let ctx = sys.ctx;
+app/src/main/assets/js/modules/EffectsManager.js:            let particles = sys.particles;
+app/src/main/assets/js/modules/EffectsManager.js:            
+app/src/main/assets/js/modules/EffectsManager.js:            ctx.clearRect(0, 0, canvas.width, canvas.height);
+app/src/main/assets/js/modules/EffectsManager.js:            
+app/src/main/assets/js/modules/EffectsManager.js:            for (var i = 0; i < particles.length; i++) {
+app/src/main/assets/js/modules/EffectsManager.js:                var p = particles[i];
+app/src/main/assets/js/modules/EffectsManager.js:                var currentAlpha = p.alpha + Math.sin(p.pulseVal) * 0.2;
+app/src/main/assets/js/modules/EffectsManager.js:                if (currentAlpha < 0) currentAlpha = 0;
+app/src/main/assets/js/modules/EffectsManager.js:                if (currentAlpha > 1) currentAlpha = 1;
+app/src/main/assets/js/modules/EffectsManager.js:                
+app/src/main/assets/js/modules/EffectsManager.js:                ctx.beginPath();
+app/src/main/assets/js/modules/EffectsManager.js:                ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+app/src/main/assets/js/modules/EffectsManager.js:                ctx.fillStyle = 'rgba(0, 243, 255, ' + currentAlpha + ')';
+app/src/main/assets/js/modules/EffectsManager.js:                ctx.shadowBlur = 8;
+app/src/main/assets/js/modules/EffectsManager.js:                ctx.shadowColor = '#00f3ff';
+app/src/main/assets/js/modules/EffectsManager.js:                ctx.fill();
+app/src/main/assets/js/modules/EffectsManager.js:            }
+app/src/main/assets/js/modules/EffectsManager.js:            ctx.globalAlpha = 1.0;
+app/src/main/assets/js/modules/EffectsManager.js:        }
+app/src/main/assets/js/modules/EffectsManager.js:    }
+app/src/main/assets/js/modules/EffectsManager.js:}
+app/src/main/assets/js/modules/EffectsManager.js:window.EffectsManager = EffectsManager;
+app/src/main/assets/js/modules/GameStateManager.js:class GameStateManager {
+app/src/main/assets/js/modules/GameStateManager.js:    static state = {
+app/src/main/assets/js/modules/GameStateManager.js:      screen: 'boot',
+app/src/main/assets/js/modules/GameStateManager.js:      activePanel: null,
+app/src/main/assets/js/modules/GameStateManager.js:      settings: { sound:true, haptics:true, difficulty:'normal', sensitivity:70 },
+app/src/main/assets/js/modules/GameStateManager.js:      profile: { name:'COMMANDER_01', level:99, rank:'ELITE IV', wins:1240, losses:572, streak:7 },
+app/src/main/assets/js/modules/GameStateManager.js:      loadout: { skin:'cyan', unlocked:['cyan','purple','magenta'], arena:'neon' },
+app/src/main/assets/js/modules/GameStateManager.js:      matchHistory: [
+app/src/main/assets/js/modules/GameStateManager.js:        { opp:'CYBER_VOID', result:'W', score:'10-6', mode:'RANKED' },
+app/src/main/assets/js/modules/GameStateManager.js:        { opp:'GHOST_PROTOCOL', result:'W', score:'10-8', mode:'QUICK' },
+app/src/main/assets/js/modules/GameStateManager.js:        { opp:'NULL_SECTOR', result:'L', score:'7-10', mode:'TOURNEY' },
+app/src/main/assets/js/modules/GameStateManager.js:        { opp:'RAZOR_WIRE', result:'W', score:'10-3', mode:'QUICK' }
+app/src/main/assets/js/modules/GameStateManager.js:      ],
+app/src/main/assets/js/modules/GameStateManager.js:      match: null,
+app/src/main/assets/js/modules/GameStateManager.js:      ball: {
+app/src/main/assets/js/modules/GameStateManager.js:        active: false,
+app/src/main/assets/js/modules/GameStateManager.js:        x: 0, y: 0, z: 0,
+app/src/main/assets/js/modules/GameStateManager.js:        scale: 1, shadowScale: 1, shadowOpacity: 0
+app/src/main/assets/js/modules/GameStateManager.js:      },
+app/src/main/assets/js/modules/GameStateManager.js:      throwAnim: null,
+app/src/main/assets/js/modules/GameStateManager.js:      aim: {
+app/src/main/assets/js/modules/GameStateManager.js:        phase: 'none',
+app/src/main/assets/js/modules/GameStateManager.js:        crosshair: { x: 0, y: 0, show: false, locked: false },
+app/src/main/assets/js/modules/GameStateManager.js:        preview: null
+app/src/main/assets/js/modules/GameStateManager.js:      },
+app/src/main/assets/js/modules/GameStateManager.js:      particles: []
+app/src/main/assets/js/modules/GameStateManager.js:    };
+app/src/main/assets/js/modules/GameStateManager.js:    
+app/src/main/assets/js/modules/GameStateManager.js:    static getState() {
+app/src/main/assets/js/modules/GameStateManager.js:        return GameStateManager.state;
+app/src/main/assets/js/modules/GameStateManager.js:    }
+app/src/main/assets/js/modules/GameStateManager.js:    
+app/src/main/assets/js/modules/GameStateManager.js:    static update(dt) {
+app/src/main/assets/js/modules/GameStateManager.js:        let state = GameStateManager.state;
+app/src/main/assets/js/modules/GameStateManager.js:        if (state.throwAnim) {
+app/src/main/assets/js/modules/GameStateManager.js:            let anim = state.throwAnim;
+app/src/main/assets/js/modules/GameStateManager.js:            anim.elapsed += dt * 1000; // ms
+app/src/main/assets/js/modules/GameStateManager.js:            let simTime = Math.min(anim.elapsed, anim.playMs);
+app/src/main/assets/js/modules/GameStateManager.js:            let idxF = (simTime / 1000) / anim.dt;
+app/src/main/assets/js/modules/GameStateManager.js:            let i0 = Math.min(anim.samples.length - 1, Math.floor(idxF));
+app/src/main/assets/js/modules/GameStateManager.js:            let i1 = Math.min(anim.samples.length - 1, i0 + 1);
+app/src/main/assets/js/modules/GameStateManager.js:            let frac = idxF - i0;
+app/src/main/assets/js/modules/GameStateManager.js:            let a = anim.samples[i0], b = anim.samples[i1];
+app/src/main/assets/js/modules/GameStateManager.js:            
+app/src/main/assets/js/modules/GameStateManager.js:            state.ball.active = true;
+app/src/main/assets/js/modules/GameStateManager.js:            state.ball.x = a.x + (b.x - a.x) * frac;
+app/src/main/assets/js/modules/GameStateManager.js:            state.ball.y = a.y + (b.y - a.y) * frac;
+app/src/main/assets/js/modules/GameStateManager.js:            state.ball.z = a.z + (b.z - a.z) * frac;
+app/src/main/assets/js/modules/GameStateManager.js:            
+app/src/main/assets/js/modules/GameStateManager.js:            // Calculate visual parameters based on depthRef
+app/src/main/assets/js/modules/GameStateManager.js:            let pt = state.ball;
+app/src/main/assets/js/modules/GameStateManager.js:            let depthRef = anim.depthRef;
+app/src/main/assets/js/modules/GameStateManager.js:            let scaleDepth = 1;
+app/src/main/assets/js/modules/GameStateManager.js:            if(depthRef){
+app/src/main/assets/js/modules/GameStateManager.js:              let isPlayerThrow = depthRef.startY > depthRef.endY;
+app/src/main/assets/js/modules/GameStateManager.js:              if(isPlayerThrow){
+app/src/main/assets/js/modules/GameStateManager.js:                let span = Math.max(40, depthRef.startY - depthRef.endY);
+app/src/main/assets/js/modules/GameStateManager.js:                let t = Math.max(0, Math.min(1, (depthRef.startY - pt.y) / span));
+app/src/main/assets/js/modules/GameStateManager.js:                scaleDepth = 1 - t*0.4;
+app/src/main/assets/js/modules/GameStateManager.js:              } else {
+app/src/main/assets/js/modules/GameStateManager.js:                let span = Math.max(40, depthRef.endY - depthRef.startY);
+app/src/main/assets/js/modules/GameStateManager.js:                let t = Math.max(0, Math.min(1, (pt.y - depthRef.startY) / span));
+app/src/main/assets/js/modules/GameStateManager.js:                scaleDepth = 0.6 + t*0.4;
+app/src/main/assets/js/modules/GameStateManager.js:              }
+app/src/main/assets/js/modules/GameStateManager.js:            }
+app/src/main/assets/js/modules/GameStateManager.js:            state.ball.scaleDepth = scaleDepth;
+app/src/main/assets/js/modules/GameStateManager.js:            state.ball.shadowScale = Math.max(0.2, 1 - (pt.z / 150));
+app/src/main/assets/js/modules/GameStateManager.js:            state.ball.shadowOpacity = Math.max(0, 1 - (pt.z / 150));
+app/src/main/assets/js/modules/GameStateManager.js:            
+app/src/main/assets/js/modules/GameStateManager.js:            if (anim.elapsed >= anim.playMs) {
+app/src/main/assets/js/modules/GameStateManager.js:                state.throwAnim = null; // finished
+app/src/main/assets/js/modules/GameStateManager.js:                if (anim.onComplete) anim.onComplete();
+app/src/main/assets/js/modules/GameStateManager.js:            }
+app/src/main/assets/js/modules/GameStateManager.js:        }
+app/src/main/assets/js/modules/GameStateManager.js:    }
+app/src/main/assets/js/modules/GameStateManager.js:}
+app/src/main/assets/js/modules/GameStateManager.js:window.GameStateManager = GameStateManager;
+app/src/main/assets/js/modules/GameStateManager.js:window.state = GameStateManager.state;
+app/src/main/assets/js/modules/GameStateManager.js:window.SKINS = [
+app/src/main/assets/js/modules/GameStateManager.js:  { id:'cyan', name:'Cyan Surge', color:'#00f3ff', locked:false },
+app/src/main/assets/js/modules/GameStateManager.js:  { id:'purple', name:'Violet Wraith', color:'#bd93f9', locked:false },
+app/src/main/assets/js/modules/GameStateManager.js:  { id:'magenta', name:'Magenta Pulse', color:'#ff2e78', locked:false },
+app/src/main/assets/js/modules/GameStateManager.js:  { id:'gold', name:'Gold Overdrive', color:'#ffc233', locked:true }
+app/src/main/assets/js/modules/GameStateManager.js:];
+app/src/main/assets/js/modules/GameStateManager.js:window.ARENAS = [
+app/src/main/assets/js/modules/GameStateManager.js:  { id:'neon', name:'Neon Overdrive', color:'#00f3ff' },
+app/src/main/assets/js/modules/GameStateManager.js:  { id:'space', name:'Deep Space', color:'#bd93f9' }
+app/src/main/assets/js/modules/GameStateManager.js:];
+app/src/main/assets/js/modules/GameStateManager.js:window.OPPONENTS = [
+app/src/main/assets/js/modules/GameStateManager.js:  { name:'CYBER_VOID', rank:'ELITE IV', winrate:'71%' },
+app/src/main/assets/js/modules/GameStateManager.js:  { name:'GHOST_PROTOCOL', rank:'ELITE II', winrate:'64%' },
+app/src/main/assets/js/modules/GameStateManager.js:  { name:'NULL_SECTOR', rank:'DIAMOND I', winrate:'58%' },
+app/src/main/assets/js/modules/GameStateManager.js:  { name:'RAZOR_WIRE', rank:'ELITE V', winrate:'77%' }
+app/src/main/assets/js/modules/GameStateManager.js:];
+app/src/main/assets/js/modules/InputManager.js:class InputManager {
+app/src/main/assets/js/modules/InputManager.js:    constructor(engine, predictor){
+app/src/main/assets/js/modules/InputManager.js:      this.engine = engine;
+app/src/main/assets/js/modules/InputManager.js:      this.predictor = predictor;
+app/src/main/assets/js/modules/InputManager.js:      
+app/src/main/assets/js/modules/InputManager.js:      this.layerEl = $('aim-layer');
+app/src/main/assets/js/modules/InputManager.js:      this.canvasEl = $('aim-canvas');
+app/src/main/assets/js/modules/InputManager.js:      this.ctx = this.canvasEl ? this.canvasEl.getContext('2d') : null;
+app/src/main/assets/js/modules/InputManager.js:      this.hintEl = $('aim-hint');
+app/src/main/assets/js/modules/InputManager.js:      this.crosshairEl = $('aim-crosshair');
+app/src/main/assets/js/modules/InputManager.js:      this.statsHudEl = $('aim-stats-hud');
+app/src/main/assets/js/modules/InputManager.js:      this.arcFillEl = $('arc-fill');
+app/src/main/assets/js/modules/InputManager.js:      this.spinFillEl = $('spin-fill');
+app/src/main/assets/js/modules/InputManager.js:      this.releaseFillEl = $('release-fill');
+app/src/main/assets/js/modules/InputManager.js:      this.releaseReadoutEl = $('release-readout');
+app/src/main/assets/js/modules/InputManager.js:      this.powerFillEl = $('power-fill');
+app/src/main/assets/js/modules/InputManager.js:      this.powerReadoutEl = $('power-readout');
+app/src/main/assets/js/modules/InputManager.js:
+app/src/main/assets/js/modules/InputManager.js:      this.active = false;
+app/src/main/assets/js/modules/InputManager.js:      this.pointerId = null;
+app/src/main/assets/js/modules/InputManager.js:      this.ballStart = null;
+app/src/main/assets/js/modules/InputManager.js:      this.current = null;
+app/src/main/assets/js/modules/InputManager.js:      this.target = null;
+app/src/main/assets/js/modules/InputManager.js:      this.startTarget = null;
+app/src/main/assets/js/modules/InputManager.js:      this.phase = 'target'; GameStateManager.state.aim.phase = 'target'; // 'target' or 'power'
+app/src/main/assets/js/modules/InputManager.js:      
+app/src/main/assets/js/modules/InputManager.js:      this.MAX_PULL = 250;
+app/src/main/assets/js/modules/InputManager.js:      this.MIN_PULL = 20;
+app/src/main/assets/js/modules/InputManager.js:
+app/src/main/assets/js/modules/InputManager.js:      this._bindPointerEvents();
+app/src/main/assets/js/modules/InputManager.js:    }
+app/src/main/assets/js/modules/InputManager.js:
+app/src/main/assets/js/modules/InputManager.js:    resizeCanvas(){
+app/src/main/assets/js/modules/InputManager.js:      if (!this.canvasEl) return;
+app/src/main/assets/js/modules/InputManager.js:      this.canvasEl.width = window.innerWidth;
+app/src/main/assets/js/modules/InputManager.js:      this.canvasEl.height = window.innerHeight;
+app/src/main/assets/js/modules/InputManager.js:    }
+app/src/main/assets/js/modules/InputManager.js:
+app/src/main/assets/js/modules/InputManager.js:    isReady(){
+app/src/main/assets/js/modules/InputManager.js:      var m = state.match;
+app/src/main/assets/js/modules/InputManager.js:      return !!(m && m.active && !m.paused && !m.autoPaused && !m.busy && m.turn === 'player');
+app/src/main/assets/js/modules/InputManager.js:    }
+app/src/main/assets/js/modules/InputManager.js:
+app/src/main/assets/js/modules/InputManager.js:    reset(){
+app/src/main/assets/js/modules/InputManager.js:      
+app/src/main/assets/js/modules/InputManager.js:      GameStateManager.state.aim.powerPct = 0;
+app/src/main/assets/js/modules/InputManager.js:      
+app/src/main/assets/js/modules/InputManager.js:      qsa('#ai-cups .cup').forEach(function(c){ c.classList.remove('cup-target'); });
+app/src/main/assets/js/modules/InputManager.js:      if (!GameStateManager.state.aim.statsHudData) GameStateManager.state.aim.statsHudData = {}; GameStateManager.state.aim.statsHudData.show = false;
+app/src/main/assets/js/modules/InputManager.js:      GameStateManager.state.aim.crosshair.show = false; GameStateManager.state.aim.previewDirty = true; GameStateManager.state.aim.preview = null;
+app/src/main/assets/js/modules/InputManager.js:      this.phase = 'target'; GameStateManager.state.aim.phase = 'target';
+app/src/main/assets/js/modules/InputManager.js:      this.target = null;
+app/src/main/assets/js/modules/InputManager.js:      GameStateManager.state.aim.hintOpacity = '1'; GameStateManager.state.aim.hintText = 'Drag to place your crosshair target';
+app/src/main/assets/js/modules/InputManager.js:    }
+app/src/main/assets/js/modules/InputManager.js:    
+app/src/main/assets/js/modules/InputManager.js:    tableClampedPoint(pt){
+app/src/main/assets/js/modules/InputManager.js:        var tr = this.cachedTableRect;
+app/src/main/assets/js/modules/InputManager.js:        if(!tr) return pt;
+app/src/main/assets/js/modules/InputManager.js:        return {
+app/src/main/assets/js/modules/InputManager.js:            x: clamp(pt.x, tr.left + 20, tr.right - 20),
+app/src/main/assets/js/modules/InputManager.js:            y: clamp(pt.y, tr.top + 20, tr.bottom - 40)
+app/src/main/assets/js/modules/InputManager.js:        };
+app/src/main/assets/js/modules/InputManager.js:    }
+app/src/main/assets/js/modules/InputManager.js:
+app/src/main/assets/js/modules/InputManager.js:    computeThrowParams(pull){
+app/src/main/assets/js/modules/InputManager.js:      var pullMag = Math.sqrt(pull.x*pull.x + pull.y*pull.y);
+app/src/main/assets/js/modules/InputManager.js:      var power = clamp(pullMag / 250, 0, 1.2); 
+app/src/main/assets/js/modules/InputManager.js:      var verticalPull = clamp(pull.y / 250, 0, 1.2);
+app/src/main/assets/js/modules/InputManager.js:      var spin = clamp(pull.x / 100, -1, 1);
+app/src/main/assets/js/modules/InputManager.js:      
+app/src/main/assets/js/modules/InputManager.js:      var targetDist = Math.sqrt(Math.pow(this.target.x - this.ballStart.x, 2) + Math.pow(this.target.y - this.ballStart.y, 2));
+app/src/main/assets/js/modules/InputManager.js:      var azimuth = Math.atan2(this.target.y - this.ballStart.y, this.target.x - this.ballStart.x);
+app/src/main/assets/js/modules/InputManager.js:      
+app/src/main/assets/js/modules/InputManager.js:      // We want power=1.0 to roughly land at targetDist when pulled perfectly straight back (verticalPull = power = 1.0).
+app/src/main/assets/js/modules/InputManager.js:      // D = (vh * 2 * vz) / gravity
+app/src/main/assets/js/modules/InputManager.js:      // Let base vz = 700 * verticalPull
+app/src/main/assets/js/modules/InputManager.js:      var vz = 200 + 600 * verticalPull;
+app/src/main/assets/js/modules/InputManager.js:      
+app/src/main/assets/js/modules/InputManager.js:      // At power=1, verticalPull=1, vz = 800. Time of flight = 2 * 800 / gravity. 
+app/src/main/assets/js/modules/InputManager.js:      // gravity = 3500. T = 1600 / 3500 = 0.457s.
+app/src/main/assets/js/modules/InputManager.js:      // We want D = targetDist at power=1.0. 
+app/src/main/assets/js/modules/InputManager.js:      // vh_required = targetDist / T = targetDist * gravity / (2 * vz_required_at_p1)
+app/src/main/assets/js/modules/InputManager.js:      var T_at_p1 = (2 * (200 + 600 * 1.0)) / this.engine.GRAVITY;
+app/src/main/assets/js/modules/InputManager.js:      var vh_base = targetDist / T_at_p1;
+app/src/main/assets/js/modules/InputManager.js:      
+app/src/main/assets/js/modules/InputManager.js:      var vh = vh_base * power;
+app/src/main/assets/js/modules/InputManager.js:      
+app/src/main/assets/js/modules/InputManager.js:      var vx = Math.cos(azimuth) * vh;
+app/src/main/assets/js/modules/InputManager.js:      var vy = Math.sin(azimuth) * vh;
+app/src/main/assets/js/modules/InputManager.js:      
+app/src/main/assets/js/modules/InputManager.js:      var arcFactor = verticalPull;
+app/src/main/assets/js/modules/InputManager.js:      
+app/src/main/assets/js/modules/InputManager.js:      if (!this.cachedParams) this.cachedParams = {};
+app/src/main/assets/js/modules/InputManager.js:      this.cachedParams.vx = vx;
+app/src/main/assets/js/modules/InputManager.js:      this.cachedParams.vy = vy;
+app/src/main/assets/js/modules/InputManager.js:      this.cachedParams.vz = vz;
+app/src/main/assets/js/modules/InputManager.js:      this.cachedParams.angularVelocityX = 0;
+app/src/main/assets/js/modules/InputManager.js:      this.cachedParams.angularVelocityZ = spin * 1.5;
+app/src/main/assets/js/modules/InputManager.js:      this.cachedParams.power = power;
+app/src/main/assets/js/modules/InputManager.js:      this.cachedParams.arcFactor = arcFactor;
+app/src/main/assets/js/modules/InputManager.js:      this.cachedParams.spinFactor = spin;
+app/src/main/assets/js/modules/InputManager.js:      return this.cachedParams;
+app/src/main/assets/js/modules/InputManager.js:    }
+app/src/main/assets/js/modules/InputManager.js:
+app/src/main/assets/js/modules/InputManager.js:    computeSolution(pull){
+app/src/main/assets/js/modules/InputManager.js:      var params = this.computeThrowParams(pull);
+app/src/main/assets/js/modules/InputManager.js:      var cupsEls = this.cachedCupsEls;
+app/src/main/assets/js/modules/InputManager.js:      var difficulty = state.settings.difficulty || 'normal';
+app/src/main/assets/js/modules/InputManager.js:      var windAccel = { LOW: 0, MED: 36, HIGH: 82 }[state.match ? state.match.wind : 'LOW'] || 0;
+app/src/main/assets/js/modules/InputManager.js:      
+app/src/main/assets/js/modules/InputManager.js:      if (!this.cachedInit) this.cachedInit = {};
+app/src/main/assets/js/modules/InputManager.js:      this.cachedInit.x = this.ballStart.x;
+app/src/main/assets/js/modules/InputManager.js:      this.cachedInit.y = this.ballStart.y;
+app/src/main/assets/js/modules/InputManager.js:      this.cachedInit.z = this.ballStart.z;
+app/src/main/assets/js/modules/InputManager.js:      this.cachedInit.vx = params.vx;
+app/src/main/assets/js/modules/InputManager.js:      this.cachedInit.vy = params.vy;
+app/src/main/assets/js/modules/InputManager.js:      this.cachedInit.vz = params.vz;
+app/src/main/assets/js/modules/InputManager.js:      this.cachedInit.angularVelocityX = params.angularVelocityX;
+app/src/main/assets/js/modules/InputManager.js:      this.cachedInit.angularVelocityZ = params.angularVelocityZ;
+app/src/main/assets/js/modules/InputManager.js:      var sim = this.predictor.simulate(this.cachedInit, cupsEls, this.cachedTableRect, difficulty, windAccel);
+app/src/main/assets/js/modules/InputManager.js:      
+app/src/main/assets/js/modules/InputManager.js:      var last = sim.samples[sim.samples.length - 1];
+app/src/main/assets/js/modules/InputManager.js:      var releaseQuality = clamp(1 - (params.power > 1.1 ? (params.power-1.1)*2 : 0), 0, 1);
+app/src/main/assets/js/modules/InputManager.js:      
+app/src/main/assets/js/modules/InputManager.js:      if (!this.cachedSol) this.cachedSol = { finalTarget: {}, depthRef: {} };
+app/src/main/assets/js/modules/InputManager.js:      this.cachedSol.ballStart = this.ballStart;
+app/src/main/assets/js/modules/InputManager.js:      this.cachedSol.power = params.power;
+app/src/main/assets/js/modules/InputManager.js:      this.cachedSol.arcFactor = params.arcFactor;
+app/src/main/assets/js/modules/InputManager.js:      this.cachedSol.spinFactor = params.spinFactor;
+app/src/main/assets/js/modules/InputManager.js:      this.cachedSol.samples = sim.samples;
+app/src/main/assets/js/modules/InputManager.js:      this.cachedSol.outcome = sim.outcome;
+app/src/main/assets/js/modules/InputManager.js:      this.cachedSol.hitCupEl = sim.hitCupEl;
+app/src/main/assets/js/modules/InputManager.js:      this.cachedSol.finalTarget.x = last.x;
+app/src/main/assets/js/modules/InputManager.js:      this.cachedSol.finalTarget.y = last.y;
+app/src/main/assets/js/modules/InputManager.js:      this.cachedSol.releaseQuality = releaseQuality;
+app/src/main/assets/js/modules/InputManager.js:      this.cachedSol.depthRef.startY = this.ballStart.y;
+app/src/main/assets/js/modules/InputManager.js:      this.cachedSol.depthRef.endY = this.cachedAiCupsRect.top + this.cachedAiCupsRect.height/2;
+app/src/main/assets/js/modules/InputManager.js:      return this.cachedSol;
+app/src/main/assets/js/modules/InputManager.js:    }
+app/src/main/assets/js/modules/InputManager.js:
+app/src/main/assets/js/modules/InputManager.js:    updateStatsHud(sol){
+app/src/main/assets/js/modules/InputManager.js:      GameStateManager.state.aim.statsHudData = {
+app/src/main/assets/js/modules/InputManager.js:          show: true,
+app/src/main/assets/js/modules/InputManager.js:          spinPct: Math.round(sol.spinFactor * 100),
+app/src/main/assets/js/modules/InputManager.js:          relPct: Math.round(sol.releaseQuality * 100),
+app/src/main/assets/js/modules/InputManager.js:          arcPct: Math.round(sol.arcFactor * 100),
+app/src/main/assets/js/modules/InputManager.js:          outcome: sol.outcome
+app/src/main/assets/js/modules/InputManager.js:      };
+app/src/main/assets/js/modules/InputManager.js:    }
+app/src/main/assets/js/modules/InputManager.js:
+app/src/main/assets/js/modules/InputManager.js:    updateVisuals(){
+app/src/main/assets/js/modules/InputManager.js:      var difficulty = state.settings.difficulty || 'normal';
+app/src/main/assets/js/modules/InputManager.js:      
+app/src/main/assets/js/modules/InputManager.js:      if(this.phase === 'target'){
+app/src/main/assets/js/modules/InputManager.js:          var t = this.target || this.tableClampedPoint({x: window.innerWidth/2, y: window.innerHeight/4});
+app/src/main/assets/js/modules/InputManager.js:          GameStateManager.state.aim.crosshair.x = t.x;
+app/src/main/assets/js/modules/InputManager.js:          GameStateManager.state.aim.crosshair.y = t.y;
+app/src/main/assets/js/modules/InputManager.js:          GameStateManager.state.aim.crosshair.show = true;
+app/src/main/assets/js/modules/InputManager.js:          GameStateManager.state.aim.hintText = 'Drag to place crosshair';
+app/src/main/assets/js/modules/InputManager.js:          GameStateManager.state.aim.hintOpacity = '1';
+app/src/main/assets/js/modules/InputManager.js:          return;
+app/src/main/assets/js/modules/InputManager.js:      }
+app/src/main/assets/js/modules/InputManager.js:      
+app/src/main/assets/js/modules/InputManager.js:      if (!this.cachedPull) this.cachedPull = {};
+app/src/main/assets/js/modules/InputManager.js:      var pull = this.cachedPull;
+app/src/main/assets/js/modules/InputManager.js:      pull.x = this.current.x - this.pullStart.x;
+app/src/main/assets/js/modules/InputManager.js:      pull.y = this.current.y - this.pullStart.y;
+app/src/main/assets/js/modules/InputManager.js:      var valid = pull.y > this.MIN_PULL; // Must pull back
+app/src/main/assets/js/modules/InputManager.js:      
+app/src/main/assets/js/modules/InputManager.js:      var sol = valid ? this.computeSolution(pull) : null;
+app/src/main/assets/js/modules/InputManager.js:      
+app/src/main/assets/js/modules/InputManager.js:      if(sol){
+app/src/main/assets/js/modules/InputManager.js:        // Position crosshair exactly at landing point
+app/src/main/assets/js/modules/InputManager.js:        var lastZ = sol.samples[sol.samples.length - 1].z;
+app/src/main/assets/js/modules/InputManager.js:        var cx = sol.finalTarget.x;
+app/src/main/assets/js/modules/InputManager.js:        var cy = sol.finalTarget.y - lastZ * 0.85;
+app/src/main/assets/js/modules/InputManager.js:        GameStateManager.state.aim.crosshair.x = cx;
+app/src/main/assets/js/modules/InputManager.js:        GameStateManager.state.aim.crosshair.y = cy;
+app/src/main/assets/js/modules/InputManager.js:        GameStateManager.state.aim.crosshair.show = true;
+app/src/main/assets/js/modules/InputManager.js:        GameStateManager.state.aim.crosshair.locked = sol.outcome === 'hit';
+app/src/main/assets/js/modules/InputManager.js:        
+app/src/main/assets/js/modules/InputManager.js:        sol.target = sol.finalTarget;
+app/src/main/assets/js/modules/InputManager.js:        GameStateManager.state.aim.previewDirty = true; GameStateManager.state.aim.preview = { sol: sol, pullStart: this.pullStart, grazedRim: this.predictor.grazedRim(sol), firstRimSample: this.predictor.firstRimSample(sol) };
+app/src/main/assets/js/modules/InputManager.js:        
+app/src/main/assets/js/modules/InputManager.js:        GameStateManager.state.aim.stats = sol;
+app/src/main/assets/js/modules/InputManager.js:        
+app/src/main/assets/js/modules/InputManager.js:        var pwrPct = Math.round(clamp(sol.power, 0, 1) * 100);
+app/src/main/assets/js/modules/InputManager.js: GameStateManager.state.aim.powerPct = pwrPct;
+app/src/main/assets/js/modules/InputManager.js:        
+app/src/main/assets/js/modules/InputManager.js:        
+app/src/main/assets/js/modules/InputManager.js:        GameStateManager.state.aim.targetCup = sol.hitCupEl;
+app/src/main/assets/js/modules/InputManager.js:        GameStateManager.state.aim.hintOpacity = '0';
+app/src/main/assets/js/modules/InputManager.js:      } else {
+app/src/main/assets/js/modules/InputManager.js:        
+app/src/main/assets/js/modules/InputManager.js:        this.statsHudEl.classList.remove('show');
+app/src/main/assets/js/modules/InputManager.js:        GameStateManager.state.aim.crosshair.show = false; GameStateManager.state.aim.previewDirty = true; GameStateManager.state.aim.preview = null;
+app/src/main/assets/js/modules/InputManager.js:        GameStateManager.state.aim.powerPct = 0;
+app/src/main/assets/js/modules/InputManager.js:        
+app/src/main/assets/js/modules/InputManager.js:        GameStateManager.state.aim.targetCup = null;
+app/src/main/assets/js/modules/InputManager.js:        GameStateManager.state.aim.hintOpacity = '1'; GameStateManager.state.aim.hintText = 'Pull back to aim and throw';
+app/src/main/assets/js/modules/InputManager.js:      }
+app/src/main/assets/js/modules/InputManager.js:    }
+app/src/main/assets/js/modules/InputManager.js:
+app/src/main/assets/js/modules/InputManager.js:    _bindPointerEvents(){
+app/src/main/assets/js/modules/InputManager.js:      var self = this;
+app/src/main/assets/js/modules/InputManager.js:      this.layerEl.addEventListener('pointerdown', function(e){
+app/src/main/assets/js/modules/InputManager.js:        if(!self.isReady()) return;
+app/src/main/assets/js/modules/InputManager.js:        self.active = true;
+app/src/main/assets/js/modules/InputManager.js:        self.pointerId = e.pointerId;
+app/src/main/assets/js/modules/InputManager.js:        self.layerEl.setPointerCapture(e.pointerId);
+app/src/main/assets/js/modules/InputManager.js:        
+app/src/main/assets/js/modules/InputManager.js:        self.cachedBallRect = $('ball').getBoundingClientRect();
+app/src/main/assets/js/modules/InputManager.js:        self.cachedTableRect = $('table-surface').getBoundingClientRect();
+app/src/main/assets/js/modules/InputManager.js:        self.cachedAiCupsRect = $('ai-cups').getBoundingClientRect();
+app/src/main/assets/js/modules/InputManager.js:        self.cachedCupsEls = qsa('#ai-cups .cup:not(.hit)');
+app/src/main/assets/js/modules/InputManager.js:        
+app/src/main/assets/js/modules/InputManager.js:        self.ballStart = { x: self.cachedBallRect.left + self.cachedBallRect.width/2, y: self.cachedBallRect.top + self.cachedBallRect.height/2, z: 6 };
+app/src/main/assets/js/modules/InputManager.js:        
+app/src/main/assets/js/modules/InputManager.js:        if(self.phase === 'target'){
+app/src/main/assets/js/modules/InputManager.js:            self.startTarget = self.target || self.tableClampedPoint({x: e.clientX, y: e.clientY});
+app/src/main/assets/js/modules/InputManager.js:            self.pointerDownPos = {x: e.clientX, y: e.clientY};
+app/src/main/assets/js/modules/InputManager.js:            self.target = self.startTarget;
+app/src/main/assets/js/modules/InputManager.js:        } else {
+app/src/main/assets/js/modules/InputManager.js:            if (!self.pullStart) self.pullStart = {};
+app/src/main/assets/js/modules/InputManager.js:            self.pullStart.x = e.clientX; self.pullStart.y = e.clientY;
+app/src/main/assets/js/modules/InputManager.js:            if (!self.current) self.current = {};
+app/src/main/assets/js/modules/InputManager.js:            self.current.x = e.clientX; self.current.y = e.clientY;
+app/src/main/assets/js/modules/InputManager.js:        }
+app/src/main/assets/js/modules/InputManager.js:        self.updateVisuals();
+app/src/main/assets/js/modules/InputManager.js:      });
+app/src/main/assets/js/modules/InputManager.js:
+app/src/main/assets/js/modules/InputManager.js:      this.layerEl.addEventListener('pointermove', function(e){
+app/src/main/assets/js/modules/InputManager.js:        if(!self.active || e.pointerId !== self.pointerId) return;
+app/src/main/assets/js/modules/InputManager.js:        if(self.phase === 'target'){
+app/src/main/assets/js/modules/InputManager.js:            var dx = e.clientX - self.pointerDownPos.x;
+app/src/main/assets/js/modules/InputManager.js:            var dy = e.clientY - self.pointerDownPos.y;
+app/src/main/assets/js/modules/InputManager.js:            self.target = self.tableClampedPoint({x: self.startTarget.x + dx, y: self.startTarget.y + dy});
+app/src/main/assets/js/modules/InputManager.js:        } else {
+app/src/main/assets/js/modules/InputManager.js:            if (!self.current) self.current = {};
+app/src/main/assets/js/modules/InputManager.js:            self.current.x = e.clientX; self.current.y = e.clientY;
+app/src/main/assets/js/modules/InputManager.js:        }
+app/src/main/assets/js/modules/InputManager.js:        self.updateVisuals();
+app/src/main/assets/js/modules/InputManager.js:      });
+app/src/main/assets/js/modules/InputManager.js:
+app/src/main/assets/js/modules/InputManager.js:      function release(e){
+app/src/main/assets/js/modules/InputManager.js:        if(!self.active || e.pointerId !== self.pointerId) return;
+app/src/main/assets/js/modules/InputManager.js:        self.active = false;
+app/src/main/assets/js/modules/InputManager.js:        self.layerEl.releasePointerCapture(e.pointerId);
+app/src/main/assets/js/modules/InputManager.js:        
+app/src/main/assets/js/modules/InputManager.js:        if(self.phase === 'target'){
+app/src/main/assets/js/modules/InputManager.js:            self.phase = 'power';
+app/src/main/assets/js/modules/InputManager.js:            GameStateManager.state.aim.hintText = 'Pull backward to set power and arc';
+app/src/main/assets/js/modules/InputManager.js:            return;
+app/src/main/assets/js/modules/InputManager.js:        }
+app/src/main/assets/js/modules/InputManager.js:        
+app/src/main/assets/js/modules/InputManager.js:        if (!self.cachedPull) self.cachedPull = {};
+app/src/main/assets/js/modules/InputManager.js:        var pull = self.cachedPull;
+app/src/main/assets/js/modules/InputManager.js:        pull.x = self.current.x - self.pullStart.x;
+app/src/main/assets/js/modules/InputManager.js:        pull.y = self.current.y - self.pullStart.y;
+app/src/main/assets/js/modules/InputManager.js:        if(pull.y <= self.MIN_PULL){
+app/src/main/assets/js/modules/InputManager.js:          self.reset();
+app/src/main/assets/js/modules/InputManager.js:          return;
+app/src/main/assets/js/modules/InputManager.js:        }
+app/src/main/assets/js/modules/InputManager.js:        
+app/src/main/assets/js/modules/InputManager.js:        var sol = self.computeSolution(pull);
+app/src/main/assets/js/modules/InputManager.js:        self.reset();
+app/src/main/assets/js/modules/InputManager.js:        
+app/src/main/assets/js/modules/InputManager.js:        var m = state.match;
+app/src/main/assets/js/modules/InputManager.js:        m.trickArmed = false;
+app/src/main/assets/js/modules/InputManager.js:        if(typeof updateTrickButtonArmedUI === 'function') updateTrickButtonArmedUI(false);
+app/src/main/assets/js/modules/InputManager.js:        Thrower.performPlayerThrow(sol);
+app/src/main/assets/js/modules/InputManager.js:      }
+app/src/main/assets/js/modules/InputManager.js:      
+app/src/main/assets/js/modules/InputManager.js:      this.layerEl.addEventListener('pointerup', release);
+app/src/main/assets/js/modules/InputManager.js:      this.layerEl.addEventListener('pointercancel', function(e){
+app/src/main/assets/js/modules/InputManager.js:        self.active = false;
+app/src/main/assets/js/modules/InputManager.js:        self.reset();
+app/src/main/assets/js/modules/InputManager.js:      });
+app/src/main/assets/js/modules/InputManager.js:    }
+app/src/main/assets/js/modules/InputManager.js:}
+app/src/main/assets/js/modules/InputManager.js:window.InputManager = InputManager;
+app/src/main/assets/js/modules/Main.js:
+app/src/main/assets/js/modules/Main.js:/* ================= GAMEPLAY CORE ================= */
+app/src/main/assets/js/modules/Main.js:var Physics = new PhysicsEngine();
+app/src/main/assets/js/modules/Main.js:var Predictor = new TrajectoryPredictor(Physics);
+app/src/main/assets/js/modules/Main.js:var Thrower = new ThrowController(Physics, Predictor);
+app/src/main/assets/js/modules/Main.js:var Aim = new InputManager(Physics, Predictor);
+app/src/main/assets/js/modules/Main.js:window.AI = new AIController(Physics, Predictor, Thrower);
+app/src/main/assets/js/modules/Main.js:
+app/src/main/assets/js/modules/Main.js:window.addEventListener('resize', Renderer.sizeAimSvg);
+app/src/main/assets/js/modules/Main.js:
+app/src/main/assets/js/modules/Main.js:function resetAimHud(){ Aim.reset(); }
+app/src/main/assets/js/modules/Main.js:
+app/src/main/assets/js/modules/Main.js:$('btn-throw').addEventListener('click', function(){
+app/src/main/assets/js/modules/Main.js:    var m = state.match;
+app/src/main/assets/js/modules/Main.js:    if(!m || !m.active) return;
+app/src/main/assets/js/modules/Main.js:    UIRenderer.toast(Aim.phase === 'target' ? 'DRAG TO PLACE YOUR CROSSHAIR TARGET' : 'PULL BACK & RELEASE TO THROW');
+app/src/main/assets/js/modules/Main.js:    SFX.click();
+app/src/main/assets/js/modules/Main.js:});
+app/src/main/assets/js/modules/Main.js:
+app/src/main/assets/js/modules/Main.js:function updateTrickButtonArmedUI(on){
+app/src/main/assets/js/modules/Main.js:    $('btn-trick-shot').classList.toggle('trick-armed', !!on);
+app/src/main/assets/js/modules/Main.js:}
+app/src/main/assets/js/modules/Main.js:
+app/src/main/assets/js/modules/Main.js:$('btn-trick-shot').addEventListener('click', function(){
+app/src/main/assets/js/modules/Main.js:    var m = state.match;
+app/src/main/assets/js/modules/Main.js:    if(!m || !m.active || m.paused || m.autoPaused || m.busy || m.turn !== 'player') return;
+app/src/main/assets/js/modules/Main.js:    if(m.trickMeter < 100){ UIRenderer.toast('TRICK METER CHARGING'); SFX.miss(); return; }
+app/src/main/assets/js/modules/Main.js:    m.trickArmed = !m.trickArmed;
+app/src/main/assets/js/modules/Main.js:    updateTrickButtonArmedUI(m.trickArmed);
+app/src/main/assets/js/modules/Main.js:    UIRenderer.toast(m.trickArmed ? 'TRICK SHOT ARMED — PULL BACK & RELEASE' : 'TRICK SHOT DISARMED');
+app/src/main/assets/js/modules/Main.js:    SFX.click();
+app/src/main/assets/js/modules/Main.js:});
+app/src/main/assets/js/modules/Main.js:
+app/src/main/assets/js/modules/Main.js:qsa('[data-adjust]').forEach(function(btn){
+app/src/main/assets/js/modules/Main.js:    btn.addEventListener('click', function(){
+app/src/main/assets/js/modules/Main.js:        var m = state.match;
+app/src/main/assets/js/modules/Main.js:        if(!m || !m.active) return;
+app/src/main/assets/js/modules/Main.js:        var type = btn.getAttribute('data-adjust');
+app/src/main/assets/js/modules/Main.js:        SFX.click();
+app/src/main/assets/js/modules/Main.js:        if(type === 'wind'){
+app/src/main/assets/js/modules/Main.js:            m.wind = m.wind === 'LOW' ? 'MED' : (m.wind === 'MED' ? 'HIGH' : 'LOW');
+app/src/main/assets/js/modules/Main.js:            $('wind-value').textContent = m.wind;
+app/src/main/assets/js/modules/Main.js:            UIRenderer.toast('WIND SHIFTED: ' + m.wind);
+app/src/main/assets/js/modules/Main.js:        } else if(type === 'spin'){
+app/src/main/assets/js/modules/Main.js:            m.spin = !m.spin;
+app/src/main/assets/js/modules/Main.js:            $('spin-value').textContent = m.spin ? 'ON' : 'OFF';
+app/src/main/assets/js/modules/Main.js:            UIRenderer.toast('CURVE CONTROL ' + (m.spin ? 'ENGAGED' : 'DISENGAGED'));
+app/src/main/assets/js/modules/Main.js:        } else if(type === 'sens'){
+app/src/main/assets/js/modules/Main.js:            UIRenderer.openPanel('panel-settings');
+app/src/main/assets/js/modules/Main.js:        }
+app/src/main/assets/js/modules/Main.js:    });
+app/src/main/assets/js/modules/Main.js:});
+app/src/main/assets/js/modules/Main.js:
+app/src/main/assets/js/modules/Main.js:$('btn-quick-loadout').addEventListener('click', function(){ UIRenderer.openPanel('panel-loadout'); });
+app/src/main/assets/js/modules/Main.js:$('btn-quick-log').addEventListener('click', function(){ UIRenderer.openPanel('panel-log'); });
+app/src/main/assets/js/modules/Main.js:$('btn-quick-profile').addEventListener('click', function(){ UIRenderer.openPanel('panel-profile'); });
+app/src/main/assets/js/modules/Main.js:$('btn-open-settings-game').addEventListener('click', function(){ UIRenderer.openPanel('panel-settings'); });
+app/src/main/assets/js/modules/Main.js:
+app/src/main/assets/js/modules/Main.js:$('btn-pause').addEventListener('click', function(){
+app/src/main/assets/js/modules/Main.js:    var m = state.match;
+app/src/main/assets/js/modules/Main.js:    if(!m || !m.active) return;
+app/src/main/assets/js/modules/Main.js:    m.paused = true;
+app/src/main/assets/js/modules/Main.js:    UIRenderer.openModal('modal-pause');
+app/src/main/assets/js/modules/Main.js:    SFX.open();
+app/src/main/assets/js/modules/Main.js:});
+app/src/main/assets/js/modules/Main.js:
+app/src/main/assets/js/modules/Main.js:$('btn-resume').addEventListener('click', function(){
+app/src/main/assets/js/modules/Main.js:    if(state.match) state.match.paused = false;
+app/src/main/assets/js/modules/Main.js:    UIRenderer.closeModal('modal-pause');
+app/src/main/assets/js/modules/Main.js:    SFX.close();
+app/src/main/assets/js/modules/Main.js:});
+app/src/main/assets/js/modules/Main.js:
+app/src/main/assets/js/modules/Main.js:$('btn-restart').addEventListener('click', function(){
+app/src/main/assets/js/modules/Main.js:    UIRenderer.closeModal('modal-pause');
+app/src/main/assets/js/modules/Main.js:    var m = state.match;
+app/src/main/assets/js/modules/Main.js:    endMatchCleanup();
+app/src/main/assets/js/modules/Main.js:    startMatch(m.mode, m.opponent);
+app/src/main/assets/js/modules/Main.js:});
+app/src/main/assets/js/modules/Main.js:
+app/src/main/assets/js/modules/Main.js:$('btn-pause-settings').addEventListener('click', function(){ UIRenderer.openPanel('panel-settings'); });
+app/src/main/assets/js/modules/Main.js:
+app/src/main/assets/js/modules/Main.js:$('btn-quit').addEventListener('click', function(){
+app/src/main/assets/js/modules/Main.js:    UIRenderer.closeModal('modal-pause');
+app/src/main/assets/js/modules/Main.js:    endMatchCleanup();
+app/src/main/assets/js/modules/Main.js:    renderProfile();
+app/src/main/assets/js/modules/Main.js:    UIRenderer.showScreen('screen-menu');
+app/src/main/assets/js/modules/Main.js:});
+app/src/main/assets/js/modules/Main.js:
+app/src/main/assets/js/modules/Main.js:function finishMatch(result){
+app/src/main/assets/js/modules/Main.js:    var m = state.match;
+app/src/main/assets/js/modules/Main.js:    endMatchCleanup();
+app/src/main/assets/js/modules/Main.js:    var playerScore = 10 - m.aiRemaining;
+app/src/main/assets/js/modules/Main.js:    var aiScore = 10 - m.playerRemaining;
+app/src/main/assets/js/modules/Main.js:    var icon = $('go-icon'), title = $('go-title'), sub = $('go-subtitle');
+app/src/main/assets/js/modules/Main.js:    if(result === 'win'){
+app/src/main/assets/js/modules/Main.js:        icon.textContent = 'emoji_events'; icon.className = 'material-symbols-outlined text-5xl fill-icon text-primary neon-text';
+app/src/main/assets/js/modules/Main.js:        title.textContent = 'VICTORY'; title.className = 'font-display text-2xl italic-techno tracking-widest text-primary neon-text';
+app/src/main/assets/js/modules/Main.js:        sub.textContent = 'Arena Cleared';
+app/src/main/assets/js/modules/Main.js:        state.profile.wins++; state.profile.streak++;
+app/src/main/assets/js/modules/Main.js:        SFX.win(); haptic(60);
+app/src/main/assets/js/modules/Main.js:    } else if(result === 'lose'){
+app/src/main/assets/js/modules/Main.js:        icon.textContent = 'dangerous'; icon.className = 'material-symbols-outlined text-5xl fill-icon text-magenta';
+app/src/main/assets/js/modules/Main.js:        title.textContent = 'DEFEAT'; title.className = 'font-display text-2xl italic-techno tracking-widest text-magenta';
+app/src/main/assets/js/modules/Main.js:        sub.textContent = 'Core Breached';
+app/src/main/assets/js/modules/Main.js:        state.profile.losses++; state.profile.streak = 0;
+app/src/main/assets/js/modules/Main.js:        SFX.lose(); haptic(60);
+app/src/main/assets/js/modules/Main.js:    } else {
+app/src/main/assets/js/modules/Main.js:        icon.textContent = 'balance'; icon.className = 'material-symbols-outlined text-5xl fill-icon text-secondary-light';
+app/src/main/assets/js/modules/Main.js:        title.textContent = 'DRAW'; title.className = 'font-display text-2xl italic-techno tracking-widest text-secondary-light';
+app/src/main/assets/js/modules/Main.js:        sub.textContent = 'Stalemate Protocol';
+app/src/main/assets/js/modules/Main.js:    }
+app/src/main/assets/js/modules/Main.js:    $('go-score').textContent = playerScore + ' : ' + aiScore;
+app/src/main/assets/js/modules/Main.js:    $('go-xp').textContent = '+' + (result === 'win' ? 240 : result === 'lose' ? 60 : 120);
+app/src/main/assets/js/modules/Main.js:    state.matchHistory.unshift({
+app/src/main/assets/js/modules/Main.js:        opp: m.opponent,
+app/src/main/assets/js/modules/Main.js:        result: result === 'win' ? 'W' : (result === 'lose' ? 'L' : 'D'),
+app/src/main/assets/js/modules/Main.js:        score: playerScore + '-' + aiScore,
+app/src/main/assets/js/modules/Main.js:        mode: m.mode.toUpperCase()
+app/src/main/assets/js/modules/Main.js:    });
+app/src/main/assets/js/modules/Main.js:    if(state.matchHistory.length > 20) state.matchHistory.pop();
+app/src/main/assets/js/modules/Main.js:    renderProfile();
+app/src/main/assets/js/modules/Main.js:    renderLog();
+app/src/main/assets/js/modules/Main.js:    UIRenderer.openModal('modal-gameover');
+app/src/main/assets/js/modules/Main.js:}
+app/src/main/assets/js/modules/Main.js:
+app/src/main/assets/js/modules/Main.js:$('btn-rematch').addEventListener('click', function(){
+app/src/main/assets/js/modules/Main.js:    UIRenderer.closeModal('modal-gameover');
+app/src/main/assets/js/modules/Main.js:    var last = state.matchHistory[0];
+app/src/main/assets/js/modules/Main.js:    startMatch(state.match ? state.match.mode : 'quick', last ? last.opp : 'CYBER_VOID');
+app/src/main/assets/js/modules/Main.js:});
+app/src/main/assets/js/modules/Main.js:
+app/src/main/assets/js/modules/Main.js:$('btn-gameover-menu').addEventListener('click', function(){
+app/src/main/assets/js/modules/Main.js:    UIRenderer.closeModal('modal-gameover');
+app/src/main/assets/js/modules/Main.js:    UIRenderer.showScreen('screen-menu');
+app/src/main/assets/js/modules/Main.js:});
+app/src/main/assets/js/modules/Main.js:
+app/src/main/assets/js/modules/Main.js:function runBoot(){
+app/src/main/assets/js/modules/Main.js:    var bar = $('boot-bar');
+app/src/main/assets/js/modules/Main.js:    var label = $('boot-label');
+app/src/main/assets/js/modules/Main.js:    var labels = ['Initializing systems...', 'Calibrating optics...', 'Syncing arena grid...', 'Loading pilot data...', 'Ready.'];
+app/src/main/assets/js/modules/Main.js:    var pct = 0;
+app/src/main/assets/js/modules/Main.js:    var li = 0;
+app/src/main/assets/js/modules/Main.js:    var targetPct = 0;
+app/src/main/assets/js/modules/Main.js:    var lastUpdate = performance.now();
+app/src/main/assets/js/modules/Main.js:    
+app/src/main/assets/js/modules/Main.js:    function bootLoop(time) {
+app/src/main/assets/js/modules/Main.js:        if (time - lastUpdate > 100 && targetPct < 100) {
+app/src/main/assets/js/modules/Main.js:            targetPct += rand(8, 20);
+app/src/main/assets/js/modules/Main.js:            if (targetPct > 100) targetPct = 100;
+app/src/main/assets/js/modules/Main.js:            lastUpdate = time;
+app/src/main/assets/js/modules/Main.js:        }
+app/src/main/assets/js/modules/Main.js:        
+app/src/main/assets/js/modules/Main.js:        // Smooth interpolation for 60FPS visual
+app/src/main/assets/js/modules/Main.js:        pct += (targetPct - pct) * 0.15;
+app/src/main/assets/js/modules/Main.js:        
+app/src/main/assets/js/modules/Main.js:        if (pct >= 99.5) pct = 100;
+app/src/main/assets/js/modules/Main.js:        
+app/src/main/assets/js/modules/Main.js:        bar.style.width = pct + '%';
+app/src/main/assets/js/modules/Main.js:        
+app/src/main/assets/js/modules/Main.js:        var newLi = Math.min(labels.length-1, Math.floor((pct/100) * (labels.length-1)));
+app/src/main/assets/js/modules/Main.js:        if(newLi !== li){ li = newLi; label.textContent = labels[li]; }
+app/src/main/assets/js/modules/Main.js:        
+app/src/main/assets/js/modules/Main.js:        if(pct >= 100){
+app/src/main/assets/js/modules/Main.js:            setTimeout(function(){ enterMenu(); }, 300);
+app/src/main/assets/js/modules/Main.js:            return;
+app/src/main/assets/js/modules/Main.js:        }
+app/src/main/assets/js/modules/Main.js:        
+app/src/main/assets/js/modules/Main.js:        requestAnimationFrame(bootLoop);
+app/src/main/assets/js/modules/Main.js:    }
+app/src/main/assets/js/modules/Main.js:    
+app/src/main/assets/js/modules/Main.js:    var started = false;
+app/src/main/assets/js/modules/Main.js:    $('screen-boot').addEventListener('click', function(){
+app/src/main/assets/js/modules/Main.js:        if(started) return;
+app/src/main/assets/js/modules/Main.js:        started = true;
+app/src/main/assets/js/modules/Main.js:        pct = 100;
+app/src/main/assets/js/modules/Main.js:        targetPct = 100;
+app/src/main/assets/js/modules/Main.js:        bar.style.width = '100%';
+app/src/main/assets/js/modules/Main.js:        label.textContent = labels[labels.length - 1];
+app/src/main/assets/js/modules/Main.js:        enterMenu();
+app/src/main/assets/js/modules/Main.js:    }, { once:true });
+app/src/main/assets/js/modules/Main.js:    
+app/src/main/assets/js/modules/Main.js:    requestAnimationFrame(bootLoop);
+app/src/main/assets/js/modules/Main.js:}
+app/src/main/assets/js/modules/Main.js:
+app/src/main/assets/js/modules/Main.js:
+app/src/main/assets/js/modules/Main.js:let lastTime = 0;
+app/src/main/assets/js/modules/Main.js:function mainGameLoop(ts) {
+app/src/main/assets/js/modules/Main.js:    let dt = (ts - lastTime) / 1000;
+app/src/main/assets/js/modules/Main.js:    lastTime = ts;
+app/src/main/assets/js/modules/Main.js:    if (dt > 0.1) dt = 0.1; // clamp for tab switching
+app/src/main/assets/js/modules/Main.js:    
+app/src/main/assets/js/modules/Main.js:    if (window.GameStateManager) {
+app/src/main/assets/js/modules/Main.js:        GameStateManager.update(dt);
+app/src/main/assets/js/modules/Main.js:        if (window.Renderer) {
+app/src/main/assets/js/modules/Main.js:            Renderer.render(GameStateManager.getState());
+app/src/main/assets/js/modules/Main.js:        }
+app/src/main/assets/js/modules/Main.js:        if (window.EffectsManager) {
+app/src/main/assets/js/modules/Main.js:            EffectsManager.render(GameStateManager.getState());
+app/src/main/assets/js/modules/Main.js:        }
+app/src/main/assets/js/modules/Main.js:    }
+app/src/main/assets/js/modules/Main.js:    
+app/src/main/assets/js/modules/Main.js:    if (window.EffectsManager) {
+app/src/main/assets/js/modules/Main.js:        EffectsManager.update(dt);
+app/src/main/assets/js/modules/Main.js:    }
+app/src/main/assets/js/modules/Main.js:    
+app/src/main/assets/js/modules/Main.js:    requestAnimationFrame(mainGameLoop);
+app/src/main/assets/js/modules/Main.js:}
+app/src/main/assets/js/modules/Main.js:
+app/src/main/assets/js/modules/Main.js:function init() {
+app/src/main/assets/js/modules/Main.js:    if (window.EffectsManager) {
+app/src/main/assets/js/modules/Main.js:        EffectsManager.spawnParticles('boot-particles', 60);
+app/src/main/assets/js/modules/Main.js:        EffectsManager.spawnParticles('game-particles', 40);
+app/src/main/assets/js/modules/Main.js:    }
+app/src/main/assets/js/modules/Main.js:    if (window.CupManager) CupManager.buildCups();
+app/src/main/assets/js/modules/Main.js:    if (window.CameraController) {
+app/src/main/assets/js/modules/Main.js:        CameraController.setupCamera();
+app/src/main/assets/js/modules/Main.js:        CameraController.applyArenaTheme('neon');
+app/src/main/assets/js/modules/Main.js:    }
+app/src/main/assets/js/modules/Main.js:    runBoot();
+app/src/main/assets/js/modules/Main.js:    requestAnimationFrame(ts => { lastTime = ts; mainGameLoop(ts); });
+app/src/main/assets/js/modules/Main.js:}
+app/src/main/assets/js/modules/Main.js:
+app/src/main/assets/js/modules/Main.js:function enterMenu() {
+app/src/main/assets/js/modules/Main.js:    if(window.UIRenderer) UIRenderer.showScreen('screen-menu');
+app/src/main/assets/js/modules/Main.js:    syncSettingsUI();
+app/src/main/assets/js/modules/Main.js:    renderBracket();
+app/src/main/assets/js/modules/Main.js:    renderLobby();
+app/src/main/assets/js/modules/Main.js:    renderSkins();
+app/src/main/assets/js/modules/Main.js:    renderArenas();
+app/src/main/assets/js/modules/Main.js:    renderProfile();
+app/src/main/assets/js/modules/Main.js:    renderLog();
+app/src/main/assets/js/modules/Main.js:    if(window.SFX) SFX.open();
+app/src/main/assets/js/modules/Main.js:}
+app/src/main/assets/js/modules/Main.js:document.addEventListener('DOMContentLoaded', init);
+app/src/main/assets/js/modules/Main.js:
+app/src/main/assets/js/modules/Main.js:function renderLog(){
+app/src/main/assets/js/modules/Main.js:    var c = $('log-list');
+app/src/main/assets/js/modules/Main.js:    c.innerHTML = '';
+app/src/main/assets/js/modules/Main.js:    state.matchHistory.forEach(function(m){
+app/src/main/assets/js/modules/Main.js:        var div = document.createElement('div');
+app/src/main/assets/js/modules/Main.js:        div.className = 'bg-surface-light border border-white/5 p-4 rounded-xl flex justify-between items-center';
+app/src/main/assets/js/modules/Main.js:        var color = m.result === 'W' ? 'text-primary' : (m.result === 'L' ? 'text-magenta' : 'text-secondary-light');
+app/src/main/assets/js/modules/Main.js:        div.innerHTML = '<div class="flex flex-col"><span class="font-display tracking-widest text-sm text-secondary-light mb-1">' + m.mode + ' vs ' + m.opp + '</span>' +
+app/src/main/assets/js/modules/Main.js:                        '<span class="font-bold text-xl ' + color + '">' + (m.result === 'W' ? 'VICTORY' : (m.result === 'L' ? 'DEFEAT' : 'DRAW')) + '</span></div>' +
+app/src/main/assets/js/modules/Main.js:                        '<div class="font-mono text-2xl text-white/90">' + m.score + '</div>';
+app/src/main/assets/js/modules/Main.js:        c.appendChild(div);
+app/src/main/assets/js/modules/Main.js:    });
+app/src/main/assets/js/modules/Main.js:}
+app/src/main/assets/js/modules/Main.js:
+app/src/main/assets/js/modules/Main.js:function renderBracket(){
+app/src/main/assets/js/modules/Main.js:    var c = $('tourney-bracket') || $('bracket-list'); if (!c) return;
+app/src/main/assets/js/modules/Main.js:    c.innerHTML = '';
+app/src/main/assets/js/modules/Main.js:    OPPONENTS.forEach(function(o, i){
+app/src/main/assets/js/modules/Main.js:        var div = document.createElement('div');
+app/src/main/assets/js/modules/Main.js:        div.className = 'bg-surface-light border border-white/5 p-4 rounded-xl flex items-center justify-between mb-3';
+app/src/main/assets/js/modules/Main.js:        div.innerHTML = '<div class="flex items-center"><div class="w-8 h-8 rounded bg-primary/20 flex items-center justify-center mr-4"><span class="font-display text-primary">' + (i+1) + '</span></div>' +
+app/src/main/assets/js/modules/Main.js:                        '<div class="flex flex-col"><span class="font-bold text-white/90">' + o.name + '</span><span class="text-xs text-secondary-light uppercase tracking-widest">' + o.rank + '</span></div></div>' +
+app/src/main/assets/js/modules/Main.js:                        '<button class="btn-play-tourney material-symbols-outlined fill-icon text-3xl text-primary opacity-70 hover:opacity-100 transition-opacity" data-idx="'+i+'">play_circle</button>';
+app/src/main/assets/js/modules/Main.js:        c.appendChild(div);
+app/src/main/assets/js/modules/Main.js:    });
+app/src/main/assets/js/modules/Main.js:    qsa('.btn-play-tourney', c).forEach(function(btn){
+app/src/main/assets/js/modules/Main.js:        btn.addEventListener('click', function(){ startMatch('tourney', OPPONENTS[btn.dataset.idx].name); });
+app/src/main/assets/js/modules/Main.js:    });
+app/src/main/assets/js/modules/Main.js:}
+app/src/main/assets/js/modules/Main.js:
+app/src/main/assets/js/modules/Main.js:function renderLobby(){
+app/src/main/assets/js/modules/Main.js:    var c = $('lobby-list'); if (!c) return;
+app/src/main/assets/js/modules/Main.js:    c.innerHTML = '';
+app/src/main/assets/js/modules/Main.js:    OPPONENTS.forEach(function(o, i){
+app/src/main/assets/js/modules/Main.js:        var div = document.createElement('div');
+app/src/main/assets/js/modules/Main.js:        div.className = 'bg-surface-light border border-white/5 p-4 rounded-xl flex items-center justify-between mb-3';
+app/src/main/assets/js/modules/Main.js:        div.innerHTML = '<div class="flex items-center"><div class="w-2 h-2 rounded-full bg-primary animate-pulse mr-4"></div>' +
+app/src/main/assets/js/modules/Main.js:                        '<div class="flex flex-col"><span class="font-bold text-white/90">' + o.name + '</span><span class="text-xs text-secondary-light uppercase tracking-widest">WR: ' + o.winrate + '</span></div></div>' +
+app/src/main/assets/js/modules/Main.js:                        '<button class="btn-play-quick px-4 py-2 bg-primary/10 text-primary font-bold rounded hover:bg-primary/20 transition-colors uppercase tracking-widest text-sm" data-idx="'+i+'">CHALLENGE</button>';
+app/src/main/assets/js/modules/Main.js:        c.appendChild(div);
+app/src/main/assets/js/modules/Main.js:    });
+app/src/main/assets/js/modules/Main.js:    qsa('.btn-play-quick', c).forEach(function(btn){
+app/src/main/assets/js/modules/Main.js:        btn.addEventListener('click', function(){ startMatch('quick', OPPONENTS[btn.dataset.idx].name); });
+app/src/main/assets/js/modules/Main.js:    });
+app/src/main/assets/js/modules/Main.js:}
+app/src/main/assets/js/modules/Main.js:
+app/src/main/assets/js/modules/Main.js:function renderSkins(){
+app/src/main/assets/js/modules/Main.js:    var c = $('skin-grid');
+app/src/main/assets/js/modules/Main.js:    c.innerHTML = '';
+app/src/main/assets/js/modules/Main.js:    SKINS.forEach(function(s){
+app/src/main/assets/js/modules/Main.js:        var div = document.createElement('div');
+app/src/main/assets/js/modules/Main.js:        var isSel = state.loadout.skin === s.id;
+app/src/main/assets/js/modules/Main.js:        var canEquip = state.loadout.unlocked.indexOf(s.id) !== -1;
+app/src/main/assets/js/modules/Main.js:        div.className = 'relative aspect-square rounded-2xl border-2 flex items-center justify-center cursor-pointer overflow-hidden transition-all duration-300 ' + (isSel ? 'border-primary' : 'border-white/10 opacity-70 hover:opacity-100');
+app/src/main/assets/js/modules/Main.js:        var bg = document.createElement('div');
+app/src/main/assets/js/modules/Main.js:        bg.className = 'absolute inset-0 opacity-20';
+app/src/main/assets/js/modules/Main.js:        bg.style.backgroundColor = s.color;
+app/src/main/assets/js/modules/Main.js:        var ball = document.createElement('div');
+app/src/main/assets/js/modules/Main.js:        ball.className = 'w-16 h-16 rounded-full shadow-[inset_-4px_-4px_12px_rgba(0,0,0,0.6)] relative z-10';
+app/src/main/assets/js/modules/Main.js:        ball.style.backgroundColor = s.color;
+app/src/main/assets/js/modules/Main.js:        if(!canEquip){
+app/src/main/assets/js/modules/Main.js:            var lck = document.createElement('span');
+app/src/main/assets/js/modules/Main.js:            lck.className = 'material-symbols-outlined absolute inset-0 m-auto w-8 h-8 flex items-center justify-center text-white/50 z-20';
+app/src/main/assets/js/modules/Main.js:            lck.textContent = 'lock';
+app/src/main/assets/js/modules/Main.js:            div.appendChild(lck);
+app/src/main/assets/js/modules/Main.js:            div.classList.add('grayscale');
+app/src/main/assets/js/modules/Main.js:        }
+app/src/main/assets/js/modules/Main.js:        div.appendChild(bg);
+app/src/main/assets/js/modules/Main.js:        div.appendChild(ball);
+app/src/main/assets/js/modules/Main.js:        div.addEventListener('click', function(){
+app/src/main/assets/js/modules/Main.js:            if(!canEquip){ UIRenderer.toast('SKIN LOCKED'); SFX.miss(); return; }
+app/src/main/assets/js/modules/Main.js:            state.loadout.skin = s.id;
+app/src/main/assets/js/modules/Main.js:            renderSkins();
+app/src/main/assets/js/modules/Main.js:            document.documentElement.style.setProperty('--ball-color', s.color);
+app/src/main/assets/js/modules/Main.js:            SFX.click();
+app/src/main/assets/js/modules/Main.js:        });
+app/src/main/assets/js/modules/Main.js:        c.appendChild(div);
+app/src/main/assets/js/modules/Main.js:    });
+app/src/main/assets/js/modules/Main.js:}
+app/src/main/assets/js/modules/Main.js:
+app/src/main/assets/js/modules/Main.js:function renderArenas(){
+app/src/main/assets/js/modules/Main.js:    var c = $('arena-grid');
+app/src/main/assets/js/modules/Main.js:    c.innerHTML = '';
+app/src/main/assets/js/modules/Main.js:    ARENAS.forEach(function(a){
+app/src/main/assets/js/modules/Main.js:        var div = document.createElement('div');
+app/src/main/assets/js/modules/Main.js:        var isSel = state.loadout.arena === a.id;
+app/src/main/assets/js/modules/Main.js:        div.className = 'relative h-24 rounded-2xl border-2 flex items-center justify-center cursor-pointer overflow-hidden transition-all duration-300 ' + (isSel ? 'border-primary' : 'border-white/10 opacity-70 hover:opacity-100');
+app/src/main/assets/js/modules/Main.js:        var bg = document.createElement('div');
+app/src/main/assets/js/modules/Main.js:        bg.className = 'absolute inset-0 opacity-30';
+app/src/main/assets/js/modules/Main.js:        bg.style.backgroundColor = a.color;
+app/src/main/assets/js/modules/Main.js:        var name = document.createElement('span');
+app/src/main/assets/js/modules/Main.js:        name.className = 'relative z-10 font-display tracking-widest text-sm font-bold text-white';
+app/src/main/assets/js/modules/Main.js:        name.textContent = a.name.toUpperCase();
+app/src/main/assets/js/modules/Main.js:        div.appendChild(bg);
+app/src/main/assets/js/modules/Main.js:        div.appendChild(name);
+app/src/main/assets/js/modules/Main.js:        div.addEventListener('click', function(){
+app/src/main/assets/js/modules/Main.js:            state.loadout.arena = a.id;
+app/src/main/assets/js/modules/Main.js:            renderArenas();
+app/src/main/assets/js/modules/Main.js:            CameraController.applyArenaTheme(a.id);
+app/src/main/assets/js/modules/Main.js:            SFX.click();
+app/src/main/assets/js/modules/Main.js:        });
+app/src/main/assets/js/modules/Main.js:        c.appendChild(div);
+app/src/main/assets/js/modules/Main.js:    });
+app/src/main/assets/js/modules/Main.js:}
+app/src/main/assets/js/modules/Main.js:
+app/src/main/assets/js/modules/Main.js:function renderProfile(){
+app/src/main/assets/js/modules/Main.js:    var p = state.profile;
+app/src/main/assets/js/modules/Main.js:    var wr = p.wins + p.losses > 0 ? Math.round((p.wins / (p.wins + p.losses)) * 100) : 0;
+app/src/main/assets/js/modules/Main.js:    qsa('.prof-name').forEach(function(el){ el.textContent = p.name; });
+app/src/main/assets/js/modules/Main.js:    qsa('.prof-rank').forEach(function(el){ el.textContent = p.rank; });
+app/src/main/assets/js/modules/Main.js:    qsa('.prof-level').forEach(function(el){ el.textContent = p.level; });
+app/src/main/assets/js/modules/Main.js:    $('profile-wins').textContent = p.wins;
+app/src/main/assets/js/modules/Main.js:    $('profile-losses').textContent = p.losses;
+app/src/main/assets/js/modules/Main.js:    $('profile-winrate').textContent = wr + '%';
+app/src/main/assets/js/modules/Main.js:    $('profile-streak').textContent = p.streak;
+app/src/main/assets/js/modules/Main.js:}
+app/src/main/assets/js/modules/Main.js:
+app/src/main/assets/js/modules/Main.js:function syncSettingsUI(){
+app/src/main/assets/js/modules/Main.js:    var ts = $('toggle-sound');
+app/src/main/assets/js/modules/Main.js:    if(ts) {
+app/src/main/assets/js/modules/Main.js:        ts.className = 'toggle-switch w-12 h-7 rounded-full relative transition-transform duration-300 ease-out ' + (state.settings.sound ? 'bg-primary' : 'bg-surface-light');
+app/src/main/assets/js/modules/Main.js:        ts.querySelector('.knob').style.transform = state.settings.sound ? 'translateX(20px)' : 'translateX(0)';
+app/src/main/assets/js/modules/Main.js:    }
+app/src/main/assets/js/modules/Main.js:    var th = $('toggle-haptics');
+app/src/main/assets/js/modules/Main.js:    if(th) {
+app/src/main/assets/js/modules/Main.js:        th.className = 'toggle-switch w-12 h-7 rounded-full relative transition-transform duration-300 ease-out ' + (state.settings.haptics ? 'bg-primary' : 'bg-surface-light');
+app/src/main/assets/js/modules/Main.js:        th.querySelector('.knob').style.transform = state.settings.haptics ? 'translateX(20px)' : 'translateX(0)';
+app/src/main/assets/js/modules/Main.js:    }
+app/src/main/assets/js/modules/Main.js:    qsa('.btn-diff').forEach(function(b){
+app/src/main/assets/js/modules/Main.js:        if(b.dataset.val === state.settings.difficulty){ b.classList.add('bg-primary', 'text-surface'); b.classList.remove('bg-surface-light', 'text-white/70'); }
+app/src/main/assets/js/modules/Main.js:        else { b.classList.remove('bg-primary', 'text-surface'); b.classList.add('bg-surface-light', 'text-white/70'); }
+app/src/main/assets/js/modules/Main.js:    });
+app/src/main/assets/js/modules/Main.js:    var sl = $('sensitivity-slider') || $('sens-slider');
+app/src/main/assets/js/modules/Main.js:    if(sl) sl.value = state.settings.sensitivity;
+app/src/main/assets/js/modules/Main.js:}
+app/src/main/assets/js/modules/Main.js:
+app/src/main/assets/js/modules/Main.js:$('toggle-sound').addEventListener('click', function(){ state.settings.sound = !state.settings.sound; syncSettingsUI(); SFX.click(); });
+app/src/main/assets/js/modules/Main.js:$('toggle-haptics').addEventListener('click', function(){ state.settings.haptics = !state.settings.haptics; syncSettingsUI(); SFX.click(); if(state.settings.haptics) haptic(30); });
+app/src/main/assets/js/modules/Main.js:qsa('.btn-diff').forEach(function(b){
+app/src/main/assets/js/modules/Main.js:    b.addEventListener('click', function(){
+app/src/main/assets/js/modules/Main.js:        state.settings.difficulty = b.dataset.val;
+app/src/main/assets/js/modules/Main.js:        syncSettingsUI();
+app/src/main/assets/js/modules/Main.js:        SFX.click();
+app/src/main/assets/js/modules/Main.js:        UIRenderer.toast('DIFFICULTY: ' + state.settings.difficulty.toUpperCase());
+app/src/main/assets/js/modules/Main.js:    });
+app/src/main/assets/js/modules/Main.js:});
+app/src/main/assets/js/modules/Main.js:var _sl = $('sensitivity-slider') || $('sens-slider'); if(_sl) _sl.addEventListener('input', function(e){ state.settings.sensitivity = parseInt(e.target.value, 10); });
+app/src/main/assets/js/modules/Main.js:
+app/src/main/assets/js/modules/Main.js:function runDiagnostics(){
+app/src/main/assets/js/modules/Main.js:    var g = $('sys-graph');
+app/src/main/assets/js/modules/Main.js:    g.innerHTML = '';
+app/src/main/assets/js/modules/Main.js:    for(var i=0;i<24;i++){
+app/src/main/assets/js/modules/Main.js:        var bar = document.createElement('div');
+app/src/main/assets/js/modules/Main.js:        bar.className = 'w-2 bg-primary/40 rounded-t';
+app/src/main/assets/js/modules/Main.js:        bar.style.height = rand(20, 100) + '%';
+app/src/main/assets/js/modules/Main.js:        g.appendChild(bar);
+app/src/main/assets/js/modules/Main.js:    }
+app/src/main/assets/js/modules/Main.js:    setInterval(function(){
+app/src/main/assets/js/modules/Main.js:        if(state.activePanel !== 'panel-log') return;
+app/src/main/assets/js/modules/Main.js:        g.removeChild(g.firstChild);
+app/src/main/assets/js/modules/Main.js:        var bar = document.createElement('div');
+app/src/main/assets/js/modules/Main.js:        bar.className = 'w-2 bg-primary/60 rounded-t';
+app/src/main/assets/js/modules/Main.js:        bar.style.height = rand(20, 100) + '%';
+app/src/main/assets/js/modules/Main.js:        g.appendChild(bar);
+app/src/main/assets/js/modules/Main.js:    }, 400);
+app/src/main/assets/js/modules/Main.js:}
+app/src/main/assets/js/modules/Main.js:
+app/src/main/assets/js/modules/Main.js:function newMatchState(mode, opponent){
+app/src/main/assets/js/modules/Main.js:    return {
+app/src/main/assets/js/modules/Main.js:        mode: mode,
+app/src/main/assets/js/modules/Main.js:        opponent: opponent,
+app/src/main/assets/js/modules/Main.js:        active: true,
+app/src/main/assets/js/modules/Main.js:        paused: false,
+app/src/main/assets/js/modules/Main.js:        autoPaused: false,
+app/src/main/assets/js/modules/Main.js:        timer: 90,
+app/src/main/assets/js/modules/Main.js:        overtimeUsed: false,
+app/src/main/assets/js/modules/Main.js:        playerRemaining: 10,
+app/src/main/assets/js/modules/Main.js:        aiRemaining: 10,
+app/src/main/assets/js/modules/Main.js:        power: 75,
+app/src/main/assets/js/modules/Main.js:        powerDir: 1,
+app/src/main/assets/js/modules/Main.js:        turn: 'player',
+app/src/main/assets/js/modules/Main.js:        busy: false,
+app/src/main/assets/js/modules/Main.js:        trickArmed: false,
+app/src/main/assets/js/modules/Main.js:        trickMeter: 0,
+app/src/main/assets/js/modules/Main.js:        wind: 'LOW',
+app/src/main/assets/js/modules/Main.js:        spin: false,
+app/src/main/assets/js/modules/Main.js:        attempts: 0,
+app/src/main/assets/js/modules/Main.js:        hits: 0,
+app/src/main/assets/js/modules/Main.js:        timerHandle: null,
+app/src/main/assets/js/modules/Main.js:        powerHandle: null
+app/src/main/assets/js/modules/Main.js:    };
+app/src/main/assets/js/modules/Main.js:}
+app/src/main/assets/js/modules/Main.js:
+app/src/main/assets/js/modules/Main.js:function startMatch(mode, opponent){
+app/src/main/assets/js/modules/Main.js:    UIRenderer.closePanel();
+app/src/main/assets/js/modules/Main.js:    state.match = newMatchState(mode, opponent || 'CYBER_VOID');
+app/src/main/assets/js/modules/Main.js:    CupManager.buildCups();
+app/src/main/assets/js/modules/Main.js:    BallController.resetBallPosition('player');
+app/src/main/assets/js/modules/Main.js:    Renderer.
+app/src/main/assets/js/modules/Main.js:    UIRenderer.showScreen('screen-game');
+app/src/main/assets/js/modules/Main.js:    Renderer.sizeAimSvg();
+app/src/main/assets/js/modules/Main.js:    resetAimHud();
+app/src/main/assets/js/modules/Main.js:    
+app/src/main/assets/js/modules/Main.js:    startTimer();
+app/src/main/assets/js/modules/Main.js:    UIRenderer.toast((mode || 'QUICK').toUpperCase() + ' MATCH VS ' + (opponent || 'CYBER_VOID'));
+app/src/main/assets/js/modules/Main.js:}
+app/src/main/assets/js/modules/Main.js:
+app/src/main/assets/js/modules/Main.js:function endMatchCleanup(){
+app/src/main/assets/js/modules/Main.js:    var m = state.match;
+app/src/main/assets/js/modules/Main.js:    if(!m) return;
+app/src/main/assets/js/modules/Main.js:    if(m.timerHandle) clearInterval(m.timerHandle);
+app/src/main/assets/js/modules/Main.js:    
+app/src/main/assets/js/modules/Main.js:    m.active = false;
+app/src/main/assets/js/modules/Main.js:}
+app/src/main/assets/js/modules/Main.js:
+app/src/main/assets/js/modules/Main.js:function startTimer(){
+app/src/main/assets/js/modules/Main.js:    var m = state.match;
+app/src/main/assets/js/modules/Main.js:    $('game-timer').textContent = m.timer;
+app/src/main/assets/js/modules/Main.js:    $('game-timer').style.color = '#00f3ff';
+app/src/main/assets/js/modules/Main.js:    m.timerHandle = setInterval(function(){
+app/src/main/assets/js/modules/Main.js:        if(m.paused || m.autoPaused || !m.active || m.busy) return;
+app/src/main/assets/js/modules/Main.js:        m.timer--;
+app/src/main/assets/js/modules/Main.js:        if(m.timer <= 15) $('game-timer').style.color = '#ff5566';
+app/src/main/assets/js/modules/Main.js:        if(m.timer <= 5 && m.timer > 0) SFX.click();
+app/src/main/assets/js/modules/Main.js:        if(m.timer <= 0){
+app/src/main/assets/js/modules/Main.js:            $('game-timer').textContent = '00';
+app/src/main/assets/js/modules/Main.js:            clearInterval(m.timerHandle);
+app/src/main/assets/js/modules/Main.js:            if(m.playerRemaining === m.aiRemaining && !m.overtimeUsed){
+app/src/main/assets/js/modules/Main.js:                m.overtimeUsed = true;
+app/src/main/assets/js/modules/Main.js:                m.timer = 30;
+app/src/main/assets/js/modules/Main.js:                $('game-timer').style.color = '#ffd23f';
+app/src/main/assets/js/modules/Main.js:                UIRenderer.toast('OVERTIME PROTOCOL ACTIVATED');
+app/src/main/assets/js/modules/Main.js:                SFX.open();
+app/src/main/assets/js/modules/Main.js:                startTimer();
+app/src/main/assets/js/modules/Main.js:            } else {
+app/src/main/assets/js/modules/Main.js:                finishMatch(m.playerRemaining < m.aiRemaining ? 'win' : (m.aiRemaining < m.playerRemaining ? 'lose' : 'draw'));
+app/src/main/assets/js/modules/Main.js:            }
+app/src/main/assets/js/modules/Main.js:        } else {
+app/src/main/assets/js/modules/Main.js:            $('game-timer').textContent = m.timer < 10 ? '0'+m.timer : m.timer;
+app/src/main/assets/js/modules/Main.js:        }
+app/src/main/assets/js/modules/Main.js:    }, 1000);
+app/src/main/assets/js/modules/Main.js:}
+app/src/main/assets/js/modules/Main.js:
+app/src/main/assets/js/modules/Main.js:
+app/src/main/assets/js/modules/Main.js:
+app/src/main/assets/js/modules/Main.js:// Ensure any missing UI functions that use original names are mapped to UIRenderer methods:
+app/src/main/assets/js/modules/Main.js:window.toast = UIRenderer.toast;
+app/src/main/assets/js/modules/Main.js:window.showScreen = UIRenderer.showScreen;
+app/src/main/assets/js/modules/Main.js:window.openPanel = UIRenderer.openPanel;
+app/src/main/assets/js/modules/Main.js:window.closePanel = UIRenderer.closePanel;
+app/src/main/assets/js/modules/Main.js:window.openModal = UIRenderer.openModal;
+app/src/main/assets/js/modules/Main.js:window.closeModal = UIRenderer.closeModal;
+app/src/main/assets/js/modules/PhysicsEngine.js:class PhysicsEngine {
+app/src/main/assets/js/modules/PhysicsEngine.js:    constructor() {
+app/src/main/assets/js/modules/PhysicsEngine.js:      this.GRAVITY = 3500;
+app/src/main/assets/js/modules/PhysicsEngine.js:      this.AIR_DRAG = 0.055;
+app/src/main/assets/js/modules/PhysicsEngine.js:      this.MAGNUS = 0.00035;
+app/src/main/assets/js/modules/PhysicsEngine.js:      this.SPIN_DECAY = 0.65;
+app/src/main/assets/js/modules/PhysicsEngine.js:      this.BALL_R = 13;
+app/src/main/assets/js/modules/PhysicsEngine.js:      this.CUP_HEIGHT = 30;
+app/src/main/assets/js/modules/PhysicsEngine.js:      this.TABLE_BOUNCE_E = 0.65;
+app/src/main/assets/js/modules/PhysicsEngine.js:      this.TABLE_BOUNCE_DECAY = 0.82;
+app/src/main/assets/js/modules/PhysicsEngine.js:      this.RIM_BOUNCE_E = 0.55;
+app/src/main/assets/js/modules/PhysicsEngine.js:      this.CUP_WALL_E = 0.30;
+app/src/main/assets/js/modules/PhysicsEngine.js:      this.CUP_FLOOR_E = 0.22;
+app/src/main/assets/js/modules/PhysicsEngine.js:      this.ROLL_FRICTION = 500;
+app/src/main/assets/js/modules/PhysicsEngine.js:      this.SLIDE_FRICTION = 800;
+app/src/main/assets/js/modules/PhysicsEngine.js:      this.STOP_SPEED = 14;
+app/src/main/assets/js/modules/PhysicsEngine.js:      this.DT = 1/60;
+app/src/main/assets/js/modules/PhysicsEngine.js:      this.MAX_SIM_SECONDS = 4.5;
+app/src/main/assets/js/modules/PhysicsEngine.js:    }
+app/src/main/assets/js/modules/PhysicsEngine.js:    
+app/src/main/assets/js/modules/PhysicsEngine.js:    parseCups(cupEls, difficulty) {
+app/src/main/assets/js/modules/PhysicsEngine.js:      var diffSizes = { easy: 4.0, normal: 0, hard: -2.0 };
+app/src/main/assets/js/modules/PhysicsEngine.js:      var szOffset = diffSizes[difficulty] || 0;
+app/src/main/assets/js/modules/PhysicsEngine.js:      
+app/src/main/assets/js/modules/PhysicsEngine.js:      var cups = [];
+app/src/main/assets/js/modules/PhysicsEngine.js:      for(var i=0; i<cupEls.length; i++){
+app/src/main/assets/js/modules/PhysicsEngine.js:          var el = cupEls[i];
+app/src/main/assets/js/modules/PhysicsEngine.js:          var rect = el.getBoundingClientRect();
+app/src/main/assets/js/modules/PhysicsEngine.js:          var topR = 28 + szOffset;
+app/src/main/assets/js/modules/PhysicsEngine.js:          var bottomR = 20 + szOffset;
+app/src/main/assets/js/modules/PhysicsEngine.js:          cups.push({
+app/src/main/assets/js/modules/PhysicsEngine.js:             el: el,
+app/src/main/assets/js/modules/PhysicsEngine.js:             cx: rect.left + rect.width/2,
+app/src/main/assets/js/modules/PhysicsEngine.js:             cy: rect.top + rect.height/2,
+app/src/main/assets/js/modules/PhysicsEngine.js:             colliders: {
+app/src/main/assets/js/modules/PhysicsEngine.js:                rimR: topR, // Torus major radius
+app/src/main/assets/js/modules/PhysicsEngine.js:                rimTubeR: 2.5, // Torus minor radius
+app/src/main/assets/js/modules/PhysicsEngine.js:                topInnerR: topR - 1.5,
+app/src/main/assets/js/modules/PhysicsEngine.js:                topOuterR: topR + 1.5,
+app/src/main/assets/js/modules/PhysicsEngine.js:                bottomInnerR: bottomR - 1.5,
+app/src/main/assets/js/modules/PhysicsEngine.js:                bottomOuterR: bottomR + 1.5,
+app/src/main/assets/js/modules/PhysicsEngine.js:                bottomZ: 0,
+app/src/main/assets/js/modules/PhysicsEngine.js:                height: 30
+app/src/main/assets/js/modules/PhysicsEngine.js:             }
+app/src/main/assets/js/modules/PhysicsEngine.js:          });
+app/src/main/assets/js/modules/PhysicsEngine.js:      }
+app/src/main/assets/js/modules/PhysicsEngine.js:      return cups;
+app/src/main/assets/js/modules/PhysicsEngine.js:    }
+app/src/main/assets/js/modules/PhysicsEngine.js:
+app/src/main/assets/js/modules/PhysicsEngine.js:    step(s, dt, tableRect, cups, windAccel) {
+app/src/main/assets/js/modules/PhysicsEngine.js:        var steps = 8; // high sub-stepping to prevent tunneling
+app/src/main/assets/js/modules/PhysicsEngine.js:        var sub_dt = dt / steps;
+app/src/main/assets/js/modules/PhysicsEngine.js:        
+app/src/main/assets/js/modules/PhysicsEngine.js:        for(var step = 1; step <= steps; step++) {
+app/src/main/assets/js/modules/PhysicsEngine.js:            var speed = Math.sqrt(s.vx*s.vx + s.vy*s.vy + s.vz*s.vz) || 0.0001;
+app/src/main/assets/js/modules/PhysicsEngine.js:            
+app/src/main/assets/js/modules/PhysicsEngine.js:            // Limit max velocity to avoid exploding velocities
+app/src/main/assets/js/modules/PhysicsEngine.js:            if(speed > 4000){
+app/src/main/assets/js/modules/PhysicsEngine.js:                var factor = 4000 / speed;
+app/src/main/assets/js/modules/PhysicsEngine.js:                s.vx *= factor; s.vy *= factor; s.vz *= factor;
+app/src/main/assets/js/modules/PhysicsEngine.js:                speed = 4000;
+app/src/main/assets/js/modules/PhysicsEngine.js:            }
+app/src/main/assets/js/modules/PhysicsEngine.js:            
+app/src/main/assets/js/modules/PhysicsEngine.js:            var dragK = Math.exp(-this.AIR_DRAG * sub_dt * (speed/500));
+app/src/main/assets/js/modules/PhysicsEngine.js:            s.vx *= dragK; s.vy *= dragK; s.vz *= dragK;
+app/src/main/assets/js/modules/PhysicsEngine.js:            s.vz -= this.GRAVITY * sub_dt;
+app/src/main/assets/js/modules/PhysicsEngine.js:            
+app/src/main/assets/js/modules/PhysicsEngine.js:            if(!s.insideCup){
+app/src/main/assets/js/modules/PhysicsEngine.js:                s.vx += this.MAGNUS * s.angularVelocityZ * speed * sub_dt * 60;
+app/src/main/assets/js/modules/PhysicsEngine.js:                s.vx += (windAccel||0) * sub_dt;
+app/src/main/assets/js/modules/PhysicsEngine.js:                s.angularVelocityX *= (1 - this.SPIN_DECAY*sub_dt);
+app/src/main/assets/js/modules/PhysicsEngine.js:                s.angularVelocityZ *= (1 - this.SPIN_DECAY*sub_dt);
+app/src/main/assets/js/modules/PhysicsEngine.js:            }
+app/src/main/assets/js/modules/PhysicsEngine.js:            
+app/src/main/assets/js/modules/PhysicsEngine.js:            var nextX = s.x + s.vx * sub_dt;
+app/src/main/assets/js/modules/PhysicsEngine.js:            var nextY = s.y + s.vy * sub_dt;
+app/src/main/assets/js/modules/PhysicsEngine.js:            var nextZ = s.z + s.vz * sub_dt;
+app/src/main/assets/js/modules/PhysicsEngine.js:            
+app/src/main/assets/js/modules/PhysicsEngine.js:            for(var i=0; i<cups.length; i++) {
+app/src/main/assets/js/modules/PhysicsEngine.js:                var g = cups[i];
+app/src/main/assets/js/modules/PhysicsEngine.js:                var c = g.colliders;
+app/src/main/assets/js/modules/PhysicsEngine.js:                var dx = nextX - g.cx;
+app/src/main/assets/js/modules/PhysicsEngine.js:                var dy = nextY - g.cy;
+app/src/main/assets/js/modules/PhysicsEngine.js:                var dist2D = Math.sqrt(dx*dx + dy*dy);
+app/src/main/assets/js/modules/PhysicsEngine.js:                
+app/src/main/assets/js/modules/PhysicsEngine.js:                if (dist2D > c.topOuterR + this.BALL_R + 40) continue;
+app/src/main/assets/js/modules/PhysicsEngine.js:                
+app/src/main/assets/js/modules/PhysicsEngine.js:                var ballCenterZ = nextZ + this.BALL_R;
+app/src/main/assets/js/modules/PhysicsEngine.js:                var angle = Math.atan2(dy, dx);
+app/src/main/assets/js/modules/PhysicsEngine.js:                var ringX = g.cx + c.rimR * Math.cos(angle);
+app/src/main/assets/js/modules/PhysicsEngine.js:                var ringY = g.cy + c.rimR * Math.sin(angle);
+app/src/main/assets/js/modules/PhysicsEngine.js:                var ringZ = c.height;
+app/src/main/assets/js/modules/PhysicsEngine.js:                
+app/src/main/assets/js/modules/PhysicsEngine.js:                var distToRing = Math.sqrt((nextX-ringX)*(nextX-ringX) + (nextY-ringY)*(nextY-ringY) + (ballCenterZ-ringZ)*(ballCenterZ-ringZ));
+app/src/main/assets/js/modules/PhysicsEngine.js:                
+app/src/main/assets/js/modules/PhysicsEngine.js:                // 1. Rim Torus Continuous Collision
+app/src/main/assets/js/modules/PhysicsEngine.js:                if (distToRing < this.BALL_R + c.rimTubeR) {
+app/src/main/assets/js/modules/PhysicsEngine.js:                    var nx = (nextX - ringX) / (distToRing || 1);
+app/src/main/assets/js/modules/PhysicsEngine.js:                    var ny = (nextY - ringY) / (distToRing || 1);
+app/src/main/assets/js/modules/PhysicsEngine.js:                    var nz = (ballCenterZ - ringZ) / (distToRing || 1);
+app/src/main/assets/js/modules/PhysicsEngine.js:                    
+app/src/main/assets/js/modules/PhysicsEngine.js:                    var vn = s.vx * nx + s.vy * ny + s.vz * nz;
+app/src/main/assets/js/modules/PhysicsEngine.js:                    if (vn < 0) {
+app/src/main/assets/js/modules/PhysicsEngine.js:                        var rest = this.RIM_BOUNCE_E;
+app/src/main/assets/js/modules/PhysicsEngine.js:                        s.vx -= (1 + rest) * vn * nx;
+app/src/main/assets/js/modules/PhysicsEngine.js:                        s.vy -= (1 + rest) * vn * ny;
+app/src/main/assets/js/modules/PhysicsEngine.js:                        s.vz -= (1 + rest) * vn * nz;
+app/src/main/assets/js/modules/PhysicsEngine.js:                        s.angularVelocityX *= 0.6; 
+app/src/main/assets/js/modules/PhysicsEngine.js:                        s.angularVelocityZ *= 0.6;
+app/src/main/assets/js/modules/PhysicsEngine.js:                        if (!s.event) s.event = 'rim';
+app/src/main/assets/js/modules/PhysicsEngine.js:                    }
+app/src/main/assets/js/modules/PhysicsEngine.js:                    var push = (this.BALL_R + c.rimTubeR) - distToRing;
+app/src/main/assets/js/modules/PhysicsEngine.js:                    nextX += nx * push;
+app/src/main/assets/js/modules/PhysicsEngine.js:                    nextY += ny * push;
+app/src/main/assets/js/modules/PhysicsEngine.js:                    nextZ += nz * push;
+app/src/main/assets/js/modules/PhysicsEngine.js:                    
+app/src/main/assets/js/modules/PhysicsEngine.js:                    dx = nextX - g.cx;
+app/src/main/assets/js/modules/PhysicsEngine.js:                    dy = nextY - g.cy;
+app/src/main/assets/js/modules/PhysicsEngine.js:                    dist2D = Math.sqrt(dx*dx + dy*dy);
+app/src/main/assets/js/modules/PhysicsEngine.js:                    ballCenterZ = nextZ + this.BALL_R;
+app/src/main/assets/js/modules/PhysicsEngine.js:                }
+app/src/main/assets/js/modules/PhysicsEngine.js:                
+app/src/main/assets/js/modules/PhysicsEngine.js:                // Enter / Exit Cup Logic
+app/src/main/assets/js/modules/PhysicsEngine.js:                if (!s.insideCup && nextZ <= c.height && nextZ > 0) {
+app/src/main/assets/js/modules/PhysicsEngine.js:                    if (dist2D < c.rimR) {
+app/src/main/assets/js/modules/PhysicsEngine.js:                        s.insideCup = g;
+app/src/main/assets/js/modules/PhysicsEngine.js:                        if (!s.event) s.event = 'enter';
+app/src/main/assets/js/modules/PhysicsEngine.js:                    }
+app/src/main/assets/js/modules/PhysicsEngine.js:                }
+app/src/main/assets/js/modules/PhysicsEngine.js:                
+app/src/main/assets/js/modules/PhysicsEngine.js:                if (s.insideCup === g && nextZ > c.height) {
+app/src/main/assets/js/modules/PhysicsEngine.js:                    s.insideCup = null;
+app/src/main/assets/js/modules/PhysicsEngine.js:                }
+app/src/main/assets/js/modules/PhysicsEngine.js:                
+app/src/main/assets/js/modules/PhysicsEngine.js:                // Calculate height fraction for conical walls
+app/src/main/assets/js/modules/PhysicsEngine.js:                var zFrac = clamp(ballCenterZ / c.height, 0, 1);
+app/src/main/assets/js/modules/PhysicsEngine.js:                
+app/src/main/assets/js/modules/PhysicsEngine.js:                // 2. Outer Wall Collision
+app/src/main/assets/js/modules/PhysicsEngine.js:                if (!s.insideCup) {
+app/src/main/assets/js/modules/PhysicsEngine.js:                    if (nextZ < c.height && nextZ > 0) {
+app/src/main/assets/js/modules/PhysicsEngine.js:                        var outerRAtZ = c.bottomOuterR + (c.topOuterR - c.bottomOuterR) * zFrac;
+app/src/main/assets/js/modules/PhysicsEngine.js:                        if (dist2D < outerRAtZ + this.BALL_R) {
+app/src/main/assets/js/modules/PhysicsEngine.js:                            var slope = (c.topOuterR - c.bottomOuterR) / c.height;
+app/src/main/assets/js/modules/PhysicsEngine.js:                            var dirX = dx / (dist2D || 1);
+app/src/main/assets/js/modules/PhysicsEngine.js:                            var dirY = dy / (dist2D || 1);
+app/src/main/assets/js/modules/PhysicsEngine.js:                            
+app/src/main/assets/js/modules/PhysicsEngine.js:                            var nx = dirX;
+app/src/main/assets/js/modules/PhysicsEngine.js:                            var ny = dirY;
+app/src/main/assets/js/modules/PhysicsEngine.js:                            var nz = -slope;
+app/src/main/assets/js/modules/PhysicsEngine.js:                            var nLen = Math.sqrt(nx*nx + ny*ny + nz*nz);
+app/src/main/assets/js/modules/PhysicsEngine.js:                            nx /= nLen; ny /= nLen; nz /= nLen;
+app/src/main/assets/js/modules/PhysicsEngine.js:                            
+app/src/main/assets/js/modules/PhysicsEngine.js:                            var vn = s.vx * nx + s.vy * ny + s.vz * nz;
+app/src/main/assets/js/modules/PhysicsEngine.js:                            if (vn < 0) {
+app/src/main/assets/js/modules/PhysicsEngine.js:                                s.vx -= (1 + this.CUP_WALL_E) * vn * nx;
+app/src/main/assets/js/modules/PhysicsEngine.js:                                s.vy -= (1 + this.CUP_WALL_E) * vn * ny;
+app/src/main/assets/js/modules/PhysicsEngine.js:                                s.vz -= (1 + this.CUP_WALL_E) * vn * nz;
+app/src/main/assets/js/modules/PhysicsEngine.js:                                if (!s.event) s.event = 'wall-bounce';
+app/src/main/assets/js/modules/PhysicsEngine.js:                            }
+app/src/main/assets/js/modules/PhysicsEngine.js:                            var push = (outerRAtZ + this.BALL_R) - dist2D;
+app/src/main/assets/js/modules/PhysicsEngine.js:                            nextX += dirX * push;
+app/src/main/assets/js/modules/PhysicsEngine.js:                            nextY += dirY * push;
+app/src/main/assets/js/modules/PhysicsEngine.js:                            
+app/src/main/assets/js/modules/PhysicsEngine.js:                            dx = nextX - g.cx;
+app/src/main/assets/js/modules/PhysicsEngine.js:                            dy = nextY - g.cy;
+app/src/main/assets/js/modules/PhysicsEngine.js:                            dist2D = Math.sqrt(dx*dx + dy*dy);
+app/src/main/assets/js/modules/PhysicsEngine.js:                        }
+app/src/main/assets/js/modules/PhysicsEngine.js:                    }
+app/src/main/assets/js/modules/PhysicsEngine.js:                }
+app/src/main/assets/js/modules/PhysicsEngine.js:                
+app/src/main/assets/js/modules/PhysicsEngine.js:                // 3. Inner Wall Collision & Bottom
+app/src/main/assets/js/modules/PhysicsEngine.js:                if (s.insideCup === g) {
+app/src/main/assets/js/modules/PhysicsEngine.js:                    var innerRAtZ = c.bottomInnerR + (c.topInnerR - c.bottomInnerR) * zFrac;
+app/src/main/assets/js/modules/PhysicsEngine.js:                    if (dist2D + this.BALL_R > innerRAtZ && nextZ < c.height) {
+app/src/main/assets/js/modules/PhysicsEngine.js:                        var slope = (c.topInnerR - c.bottomInnerR) / c.height;
+app/src/main/assets/js/modules/PhysicsEngine.js:                        var dirX = dx / (dist2D || 1);
+app/src/main/assets/js/modules/PhysicsEngine.js:                        var dirY = dy / (dist2D || 1);
+app/src/main/assets/js/modules/PhysicsEngine.js:                        
+app/src/main/assets/js/modules/PhysicsEngine.js:                        var nx = -dirX;
+app/src/main/assets/js/modules/PhysicsEngine.js:                        var ny = -dirY;
+app/src/main/assets/js/modules/PhysicsEngine.js:                        var nz = slope;
+app/src/main/assets/js/modules/PhysicsEngine.js:                        var nLen = Math.sqrt(nx*nx + ny*ny + nz*nz);
+app/src/main/assets/js/modules/PhysicsEngine.js:                        nx /= nLen; ny /= nLen; nz /= nLen;
+app/src/main/assets/js/modules/PhysicsEngine.js:                        
+app/src/main/assets/js/modules/PhysicsEngine.js:                        var vn = s.vx * nx + s.vy * ny + s.vz * nz;
+app/src/main/assets/js/modules/PhysicsEngine.js:                        if (vn < 0) {
+app/src/main/assets/js/modules/PhysicsEngine.js:                            s.vx -= (1 + this.CUP_WALL_E) * vn * nx;
+app/src/main/assets/js/modules/PhysicsEngine.js:                            s.vy -= (1 + this.CUP_WALL_E) * vn * ny;
+app/src/main/assets/js/modules/PhysicsEngine.js:                            s.vz -= (1 + this.CUP_WALL_E) * vn * nz;
+app/src/main/assets/js/modules/PhysicsEngine.js:                        }
+app/src/main/assets/js/modules/PhysicsEngine.js:                        var push = (dist2D + this.BALL_R) - innerRAtZ;
+app/src/main/assets/js/modules/PhysicsEngine.js:                        nextX -= dirX * push;
+app/src/main/assets/js/modules/PhysicsEngine.js:                        nextY -= dirY * push;
+app/src/main/assets/js/modules/PhysicsEngine.js:                        
+app/src/main/assets/js/modules/PhysicsEngine.js:                        dx = nextX - g.cx;
+app/src/main/assets/js/modules/PhysicsEngine.js:                        dy = nextY - g.cy;
+app/src/main/assets/js/modules/PhysicsEngine.js:                        dist2D = Math.sqrt(dx*dx + dy*dy);
+app/src/main/assets/js/modules/PhysicsEngine.js:                    }
+app/src/main/assets/js/modules/PhysicsEngine.js:                    
+app/src/main/assets/js/modules/PhysicsEngine.js:                    if (nextZ <= c.bottomZ) {
+app/src/main/assets/js/modules/PhysicsEngine.js:                        if (s.vz < 0) {
+app/src/main/assets/js/modules/PhysicsEngine.js:                            s.bounces++;
+app/src/main/assets/js/modules/PhysicsEngine.js:                            s.vz = Math.abs(s.vz) * this.CUP_FLOOR_E;
+app/src/main/assets/js/modules/PhysicsEngine.js:                            s.vx *= 0.5; s.vy *= 0.5;
+app/src/main/assets/js/modules/PhysicsEngine.js:                            if (s.vz < 20) s.vz = 0;
+app/src/main/assets/js/modules/PhysicsEngine.js:                        }
+app/src/main/assets/js/modules/PhysicsEngine.js:                        nextZ = Math.max(nextZ, c.bottomZ);
+app/src/main/assets/js/modules/PhysicsEngine.js:                    }
+app/src/main/assets/js/modules/PhysicsEngine.js:                }
+app/src/main/assets/js/modules/PhysicsEngine.js:            }
+app/src/main/assets/js/modules/PhysicsEngine.js:            
+app/src/main/assets/js/modules/PhysicsEngine.js:            if (!s.insideCup) {
+app/src/main/assets/js/modules/PhysicsEngine.js:                var tableHeight = 0;
+app/src/main/assets/js/modules/PhysicsEngine.js:                var GROUND_Z = -500;
+app/src/main/assets/js/modules/PhysicsEngine.js:                
+app/src/main/assets/js/modules/PhysicsEngine.js:                if (nextZ <= tableHeight) {
+app/src/main/assets/js/modules/PhysicsEngine.js:                    if (tableRect && nextX >= tableRect.left && nextX <= tableRect.right && nextY >= tableRect.top && nextY <= tableRect.bottom) {
+app/src/main/assets/js/modules/PhysicsEngine.js:                        if (s.vz < 0) {
+app/src/main/assets/js/modules/PhysicsEngine.js:                            s.bounces++;
+app/src/main/assets/js/modules/PhysicsEngine.js:                            var e = this.TABLE_BOUNCE_E * Math.pow(this.TABLE_BOUNCE_DECAY, s.bounces - 1);
+app/src/main/assets/js/modules/PhysicsEngine.js:                            s.vz = Math.abs(s.vz) * e;
+app/src/main/assets/js/modules/PhysicsEngine.js:                            var grip = 1 + clamp(s.angularVelocityX, -1, 1) * 0.18;
+app/src/main/assets/js/modules/PhysicsEngine.js:                            var wasHard = Math.abs(s.vz) > 260;
+app/src/main/assets/js/modules/PhysicsEngine.js:                            s.vx *= (wasHard ? 0.66 : 0.72) * grip;
+app/src/main/assets/js/modules/PhysicsEngine.js:                            s.vy *= (wasHard ? 0.66 : 0.72) * grip;
+app/src/main/assets/js/modules/PhysicsEngine.js:                            s.angularVelocityX *= 0.7; s.angularVelocityZ *= 0.7;
+app/src/main/assets/js/modules/PhysicsEngine.js:                            if (!s.event) s.event = 'bounce';
+app/src/main/assets/js/modules/PhysicsEngine.js:                            if(s.vz < 22) s.vz = 0;
+app/src/main/assets/js/modules/PhysicsEngine.js:                        }
+app/src/main/assets/js/modules/PhysicsEngine.js:                        nextZ = tableHeight;
+app/src/main/assets/js/modules/PhysicsEngine.js:                        
+app/src/main/assets/js/modules/PhysicsEngine.js:                        var hs = Math.sqrt(s.vx*s.vx + s.vy*s.vy);
+app/src/main/assets/js/modules/PhysicsEngine.js:                        if(hs > 0){
+app/src/main/assets/js/modules/PhysicsEngine.js:                            var decel = (hs > 260 ? this.SLIDE_FRICTION : this.ROLL_FRICTION) * sub_dt;
+app/src/main/assets/js/modules/PhysicsEngine.js:                            var ns = Math.max(0, hs - decel);
+app/src/main/assets/js/modules/PhysicsEngine.js:                            var k = ns / hs;
+app/src/main/assets/js/modules/PhysicsEngine.js:                            s.vx *= k; s.vy *= k;
+app/src/main/assets/js/modules/PhysicsEngine.js:                        }
+app/src/main/assets/js/modules/PhysicsEngine.js:                    } else if (nextZ <= GROUND_Z) {
+app/src/main/assets/js/modules/PhysicsEngine.js:                        nextZ = GROUND_Z;
+app/src/main/assets/js/modules/PhysicsEngine.js:                        s.vx = 0; s.vy = 0; s.vz = 0;
+app/src/main/assets/js/modules/PhysicsEngine.js:                        s.settled = true;
+app/src/main/assets/js/modules/PhysicsEngine.js:                    }
+app/src/main/assets/js/modules/PhysicsEngine.js:                }
+app/src/main/assets/js/modules/PhysicsEngine.js:                
+app/src/main/assets/js/modules/PhysicsEngine.js:                if(tableRect && nextZ >= tableHeight - 20 && nextZ <= tableHeight + 20){
+app/src/main/assets/js/modules/PhysicsEngine.js:                    if(nextX < tableRect.left + this.BALL_R){ nextX = tableRect.left + this.BALL_R; s.vx = Math.abs(s.vx) * 0.5; }
+app/src/main/assets/js/modules/PhysicsEngine.js:                    if(nextX > tableRect.right - this.BALL_R){ nextX = tableRect.right - this.BALL_R; s.vx = -Math.abs(s.vx) * 0.5; }
+app/src/main/assets/js/modules/PhysicsEngine.js:                    if(nextY < tableRect.top + this.BALL_R){ nextY = tableRect.top + this.BALL_R; s.vy = Math.abs(s.vy) * 0.5; }
+app/src/main/assets/js/modules/PhysicsEngine.js:                    if(nextY > tableRect.bottom - this.BALL_R){ nextY = tableRect.bottom - this.BALL_R; s.vy = -Math.abs(s.vy) * 0.5; }
+app/src/main/assets/js/modules/PhysicsEngine.js:                }
+app/src/main/assets/js/modules/PhysicsEngine.js:            }
+app/src/main/assets/js/modules/PhysicsEngine.js:            
+app/src/main/assets/js/modules/PhysicsEngine.js:            s.x = nextX;
+app/src/main/assets/js/modules/PhysicsEngine.js:            s.y = nextY;
+app/src/main/assets/js/modules/PhysicsEngine.js:            s.z = nextZ;
+app/src/main/assets/js/modules/PhysicsEngine.js:        }
+app/src/main/assets/js/modules/PhysicsEngine.js:    }
+app/src/main/assets/js/modules/PhysicsEngine.js:}
+app/src/main/assets/js/modules/PhysicsEngine.js:window.PhysicsEngine = PhysicsEngine;
+app/src/main/assets/js/modules/Renderer.js:
+app/src/main/assets/js/modules/Renderer.js:class Renderer {
+app/src/main/assets/js/modules/Renderer.js:    static ballEl = null;
+app/src/main/assets/js/modules/Renderer.js:    static shadowEl = null;
+app/src/main/assets/js/modules/Renderer.js:    
+app/src/main/assets/js/modules/Renderer.js:    static getBall() {
+app/src/main/assets/js/modules/Renderer.js:        if (!Renderer.ballEl) Renderer.ballEl = document.getElementById('ball');
+app/src/main/assets/js/modules/Renderer.js:        return Renderer.ballEl;
+app/src/main/assets/js/modules/Renderer.js:    }
+app/src/main/assets/js/modules/Renderer.js:    
+app/src/main/assets/js/modules/Renderer.js:    static getShadow() {
+app/src/main/assets/js/modules/Renderer.js:        if (!Renderer.shadowEl) Renderer.shadowEl = document.getElementById('ball-shadow');
+app/src/main/assets/js/modules/Renderer.js:        return Renderer.shadowEl;
+app/src/main/assets/js/modules/Renderer.js:    }
+app/src/main/assets/js/modules/Renderer.js:    static projectBallVisual(pt, depthRef, ballR){
+app/src/main/assets/js/modules/Renderer.js:      var ball = Renderer.getBall();
+app/src/main/assets/js/modules/Renderer.js:      var shadow = Renderer.getShadow();
+app/src/main/assets/js/modules/Renderer.js:      var scaleDepth = 1;
+app/src/main/assets/js/modules/Renderer.js:      if(depthRef){
+app/src/main/assets/js/modules/Renderer.js:        var isPlayerThrow = depthRef.startY > depthRef.endY;
+app/src/main/assets/js/modules/Renderer.js:        if(isPlayerThrow){
+app/src/main/assets/js/modules/Renderer.js:          var span = Math.max(40, depthRef.startY - depthRef.endY);
+app/src/main/assets/js/modules/Renderer.js:          var t = clamp((depthRef.startY - pt.y) / span, 0, 1);
+app/src/main/assets/js/modules/Renderer.js:          scaleDepth = 1 - t*0.4;
+app/src/main/assets/js/modules/Renderer.js:        } else {
+app/src/main/assets/js/modules/Renderer.js:          var span = Math.max(40, depthRef.endY - depthRef.startY);
+app/src/main/assets/js/modules/Renderer.js:          var t = clamp((pt.y - depthRef.startY) / span, 0, 1);
+app/src/main/assets/js/modules/Renderer.js:          scaleDepth = 0.6 + t*0.4;
+app/src/main/assets/js/modules/Renderer.js:        }
+app/src/main/assets/js/modules/Renderer.js:      }
+app/src/main/assets/js/modules/Renderer.js:      var lift = pt.z * 0.85;
+app/src/main/assets/js/modules/Renderer.js:      
+app/src/main/assets/js/modules/Renderer.js:      // Use hardware-accelerated transforms for 60 FPS
+app/src/main/assets/js/modules/Renderer.js:      var bx = pt.x - ballR;
+app/src/main/assets/js/modules/Renderer.js:      var by = pt.y - ballR - lift;
+app/src/main/assets/js/modules/Renderer.js:      ball.style.transform = 'translate3d(' + bx.toFixed(1) + 'px, ' + by.toFixed(1) + 'px, 0) scale(' + scaleDepth.toFixed(3) + ')';
+app/src/main/assets/js/modules/Renderer.js:      
+app/src/main/assets/js/modules/Renderer.js:      if (shadow) {
+app/src/main/assets/js/modules/Renderer.js:          var shadowScale = Math.max(0.2, 1 - (pt.z / 150));
+app/src/main/assets/js/modules/Renderer.js:          var shadowOpacity = Math.max(0, 1 - (pt.z / 150));
+app/src/main/assets/js/modules/Renderer.js:          var sx = pt.x - 11; // half of 22px width
+app/src/main/assets/js/modules/Renderer.js:          var sy = pt.y - 3.5; // half of 7px height
+app/src/main/assets/js/modules/Renderer.js:          shadow.style.transform = 'translate3d(' + sx.toFixed(1) + 'px, ' + sy.toFixed(1) + 'px, 0) scale(' + (scaleDepth * shadowScale).toFixed(3) + ')';
+app/src/main/assets/js/modules/Renderer.js:          shadow.style.opacity = shadowOpacity.toFixed(2);
+app/src/main/assets/js/modules/Renderer.js:      }
+app/src/main/assets/js/modules/Renderer.js:    }
+app/src/main/assets/js/modules/Renderer.js:
+app/src/main/assets/js/modules/Renderer.js:    static renderPreview(ctx, sol, pullPoint, valid, grazedRim, firstRimSample){
+app/src/main/assets/js/modules/Renderer.js:      if(!ctx) return;
+app/src/main/assets/js/modules/Renderer.js:      var w = ctx.canvas.width;
+app/src/main/assets/js/modules/Renderer.js:      var h = ctx.canvas.height;
+app/src/main/assets/js/modules/Renderer.js:      ctx.clearRect(0, 0, w, h);
+app/src/main/assets/js/modules/Renderer.js:      if(!valid || !sol) return;
+app/src/main/assets/js/modules/Renderer.js:      
+app/src/main/assets/js/modules/Renderer.js:      var bs = sol.ballStart;
+app/src/main/assets/js/modules/Renderer.js:      var grazed = grazedRim;
+app/src/main/assets/js/modules/Renderer.js:      var color = sol.outcome === 'hit' ? '#39ff8c' : (grazed ? '#ffd23f' : '#00f3ff');
+app/src/main/assets/js/modules/Renderer.js:      
+app/src/main/assets/js/modules/Renderer.js:      // Draw target line
+app/src/main/assets/js/modules/Renderer.js:      var last = sol.samples[sol.samples.length - 1];
+app/src/main/assets/js/modules/Renderer.js:      var lx = last.x, ly = last.y - last.z*0.85;
+app/src/main/assets/js/modules/Renderer.js:      
+app/src/main/assets/js/modules/Renderer.js:      ctx.beginPath();
+app/src/main/assets/js/modules/Renderer.js:      ctx.moveTo(sol.target.x, sol.target.y);
+app/src/main/assets/js/modules/Renderer.js:      ctx.lineTo(lx, ly);
+app/src/main/assets/js/modules/Renderer.js:      ctx.strokeStyle = 'rgba(255, 46, 196, 0.4)';
+app/src/main/assets/js/modules/Renderer.js:      ctx.lineWidth = 1;
+app/src/main/assets/js/modules/Renderer.js:      ctx.setLineDash([2, 5]);
+app/src/main/assets/js/modules/Renderer.js:      ctx.stroke();
+app/src/main/assets/js/modules/Renderer.js:      
+app/src/main/assets/js/modules/Renderer.js:      // Draw pull line
+app/src/main/assets/js/modules/Renderer.js:      if(pullPoint){
+app/src/main/assets/js/modules/Renderer.js:        ctx.beginPath();
+app/src/main/assets/js/modules/Renderer.js:        ctx.moveTo(bs.x, bs.y);
+app/src/main/assets/js/modules/Renderer.js:        ctx.lineTo(pullPoint.x, pullPoint.y);
+app/src/main/assets/js/modules/Renderer.js:        ctx.strokeStyle = 'rgba(255, 46, 196, 0.85)';
+app/src/main/assets/js/modules/Renderer.js:        ctx.lineWidth = 3;
+app/src/main/assets/js/modules/Renderer.js:        ctx.setLineDash([6, 7]);
+app/src/main/assets/js/modules/Renderer.js:        ctx.lineCap = 'round';
+app/src/main/assets/js/modules/Renderer.js:        ctx.stroke();
+app/src/main/assets/js/modules/Renderer.js:      }
+app/src/main/assets/js/modules/Renderer.js:      
+app/src/main/assets/js/modules/Renderer.js:      // Draw trajectory polyline
+app/src/main/assets/js/modules/Renderer.js:      var step = Math.max(1, Math.floor(sol.samples.length / 70));
+app/src/main/assets/js/modules/Renderer.js:      ctx.beginPath();
+app/src/main/assets/js/modules/Renderer.js:      for(var i=0; i<sol.samples.length; i+=step){
+app/src/main/assets/js/modules/Renderer.js:        var p = sol.samples[i];
+app/src/main/assets/js/modules/Renderer.js:        var px = p.x, py = p.y - p.z*0.85;
+app/src/main/assets/js/modules/Renderer.js:        if(i===0) ctx.moveTo(px, py);
+app/src/main/assets/js/modules/Renderer.js:        else ctx.lineTo(px, py);
+app/src/main/assets/js/modules/Renderer.js:      }
+app/src/main/assets/js/modules/Renderer.js:      ctx.strokeStyle = color;
+app/src/main/assets/js/modules/Renderer.js:      ctx.lineWidth = 3;
+app/src/main/assets/js/modules/Renderer.js:      ctx.setLineDash([2, 10]);
+app/src/main/assets/js/modules/Renderer.js:      ctx.globalAlpha = 0.95;
+app/src/main/assets/js/modules/Renderer.js:      ctx.lineCap = 'round';
+app/src/main/assets/js/modules/Renderer.js:      ctx.stroke();
+app/src/main/assets/js/modules/Renderer.js:      
+app/src/main/assets/js/modules/Renderer.js:      ctx.setLineDash([]);
+app/src/main/assets/js/modules/Renderer.js:      
+app/src/main/assets/js/modules/Renderer.js:      // Draw bounce markers
+app/src/main/assets/js/modules/Renderer.js:      ctx.fillStyle = '#00f3ff';
+app/src/main/assets/js/modules/Renderer.js:      ctx.globalAlpha = 0.8;
+app/src/main/assets/js/modules/Renderer.js:      sol.samples.forEach(function(p){
+app/src/main/assets/js/modules/Renderer.js:        if(p.event === 'bounce'){
+app/src/main/assets/js/modules/Renderer.js:          ctx.beginPath();
+app/src/main/assets/js/modules/Renderer.js:          ctx.arc(p.x, p.y - p.z*0.85, 3, 0, Math.PI*2);
+app/src/main/assets/js/modules/Renderer.js:          ctx.fill();
+app/src/main/assets/js/modules/Renderer.js:        }
+app/src/main/assets/js/modules/Renderer.js:      });
+app/src/main/assets/js/modules/Renderer.js:      
+app/src/main/assets/js/modules/Renderer.js:      // Draw rim marker
+app/src/main/assets/js/modules/Renderer.js:      var rimSample = firstRimSample;
+app/src/main/assets/js/modules/Renderer.js:      if(rimSample){
+app/src/main/assets/js/modules/Renderer.js:        var rx = rimSample.x, ry = rimSample.y - rimSample.z*0.85;
+app/src/main/assets/js/modules/Renderer.js:        ctx.beginPath();
+app/src/main/assets/js/modules/Renderer.js:        ctx.arc(rx, ry, 10, 0, Math.PI*2);
+app/src/main/assets/js/modules/Renderer.js:        ctx.strokeStyle = '#ffd23f';
+app/src/main/assets/js/modules/Renderer.js:        ctx.lineWidth = 2;
+app/src/main/assets/js/modules/Renderer.js:        ctx.setLineDash([3, 4]);
+app/src/main/assets/js/modules/Renderer.js:        ctx.globalAlpha = 0.9;
+app/src/main/assets/js/modules/Renderer.js:        ctx.stroke();
+app/src/main/assets/js/modules/Renderer.js:        ctx.setLineDash([]);
+app/src/main/assets/js/modules/Renderer.js:        
+app/src/main/assets/js/modules/Renderer.js:        ctx.beginPath();
+app/src/main/assets/js/modules/Renderer.js:        ctx.arc(rx, ry, 2.5, 0, Math.PI*2);
+app/src/main/assets/js/modules/Renderer.js:        ctx.fillStyle = '#ffd23f';
+app/src/main/assets/js/modules/Renderer.js:        ctx.fill();
+app/src/main/assets/js/modules/Renderer.js:      }
+app/src/main/assets/js/modules/Renderer.js:      
+app/src/main/assets/js/modules/Renderer.js:      // Draw final target circle
+app/src/main/assets/js/modules/Renderer.js:      ctx.globalAlpha = 0.95;
+app/src/main/assets/js/modules/Renderer.js:      ctx.beginPath();
+app/src/main/assets/js/modules/Renderer.js:      ctx.arc(lx, ly, 15, 0, Math.PI*2);
+app/src/main/assets/js/modules/Renderer.js:      ctx.strokeStyle = color;
+app/src/main/assets/js/modules/Renderer.js:      ctx.lineWidth = 2.5;
+app/src/main/assets/js/modules/Renderer.js:      ctx.stroke();
+app/src/main/assets/js/modules/Renderer.js:      
+app/src/main/assets/js/modules/Renderer.js:      ctx.beginPath();
+app/src/main/assets/js/modules/Renderer.js:      ctx.arc(lx, ly, 3.5, 0, Math.PI*2);
+app/src/main/assets/js/modules/Renderer.js:      ctx.fillStyle = color;
+app/src/main/assets/js/modules/Renderer.js:      ctx.fill();
+app/src/main/assets/js/modules/Renderer.js:      
+app/src/main/assets/js/modules/Renderer.js:      ctx.globalAlpha = 1.0;
+app/src/main/assets/js/modules/Renderer.js:    }
+app/src/main/assets/js/modules/Renderer.js:
+app/src/main/assets/js/modules/Renderer.js:    static highlightTargetCup(cupsContainerSel, sol, difficulty, activeCups){
+app/src/main/assets/js/modules/Renderer.js:      qsa(cupsContainerSel + ' .cup').forEach(function(c){ c.classList.remove('cup-target'); });
+app/src/main/assets/js/modules/Renderer.js:      if(difficulty === 'hard' || !sol) return;
+app/src/main/assets/js/modules/Renderer.js:      var highlightCup = sol.hitCupEl;
+app/src/main/assets/js/modules/Renderer.js:      if(!highlightCup){
+app/src/main/assets/js/modules/Renderer.js:        var cupsEls = activeCups || qsa(cupsContainerSel + ' .cup:not(.hit)');
+app/src/main/assets/js/modules/Renderer.js:        var last = sol.samples[sol.samples.length - 1];
+app/src/main/assets/js/modules/Renderer.js:        var nd = Infinity, nc = null;
+app/src/main/assets/js/modules/Renderer.js:        cupsEls.forEach(function(c){
+app/src/main/assets/js/modules/Renderer.js:          var cx = parseFloat(c.dataset.cx); var cy = parseFloat(c.dataset.cy);
+app/src/main/assets/js/modules/Renderer.js:          if (isNaN(cx)) {
+app/src/main/assets/js/modules/Renderer.js:            var r = c.getBoundingClientRect();
+app/src/main/assets/js/modules/Renderer.js:            cx = r.left+r.width/2; cy = r.top+r.height/2;
+app/src/main/assets/js/modules/Renderer.js:            c.dataset.cx = cx; c.dataset.cy = cy;
+app/src/main/assets/js/modules/Renderer.js:          }
+app/src/main/assets/js/modules/Renderer.js:          var d = Math.sqrt(Math.pow(cx-last.x, 2) + Math.pow(cy-last.y, 2));
+app/src/main/assets/js/modules/Renderer.js:          if(d < nd){ nd = d; nc = c; }
+app/src/main/assets/js/modules/Renderer.js:        });
+app/src/main/assets/js/modules/Renderer.js:        if(nc && nd < 60) highlightCup = nc;
+app/src/main/assets/js/modules/Renderer.js:      }
+app/src/main/assets/js/modules/Renderer.js:      if(highlightCup) highlightCup.classList.add('cup-target');
+app/src/main/assets/js/modules/Renderer.js:    }
+app/src/main/assets/js/modules/Renderer.js:
+app/src/main/assets/js/modules/Renderer.js:    
+app/src/main/assets/js/modules/Renderer.js:    
+app/src/main/assets/js/modules/Renderer.js:    
+app/src/main/assets/js/modules/Renderer.js:    static DOM = { initialized: false };
+app/src/main/assets/js/modules/Renderer.js:    static initDOM() {
+app/src/main/assets/js/modules/Renderer.js:        if (Renderer.DOM.initialized) return;
+app/src/main/assets/js/modules/Renderer.js:        Renderer.DOM.crosshairEl = document.getElementById('aim-crosshair');
+app/src/main/assets/js/modules/Renderer.js:        Renderer.DOM.powerFillEl = document.getElementById('power-fill');
+app/src/main/assets/js/modules/Renderer.js:        Renderer.DOM.canvas = document.getElementById('aim-layer-canvas');
+app/src/main/assets/js/modules/Renderer.js:        Renderer.DOM.ctx = Renderer.DOM.canvas ? Renderer.DOM.canvas.getContext('2d') : null;
+app/src/main/assets/js/modules/Renderer.js:        Renderer.DOM.aiCups = Array.from(document.querySelectorAll('#ai-cups .cup'));
+app/src/main/assets/js/modules/Renderer.js:        Renderer.DOM.initialized = true;
+app/src/main/assets/js/modules/Renderer.js:    }
+app/src/main/assets/js/modules/Renderer.js:
+app/src/main/assets/js/modules/Renderer.js:    static render(state) {
+app/src/main/assets/js/modules/Renderer.js:        if (!state) return;
+app/src/main/assets/js/modules/Renderer.js:        Renderer.initDOM();
+app/src/main/assets/js/modules/Renderer.js:        
+app/src/main/assets/js/modules/Renderer.js:        let ball = Renderer.getBall();
+app/src/main/assets/js/modules/Renderer.js:        let shadow = Renderer.getShadow();
+app/src/main/assets/js/modules/Renderer.js:        
+app/src/main/assets/js/modules/Renderer.js:        if (state.ball && state.ball.active) {
+app/src/main/assets/js/modules/Renderer.js:            let pt = state.ball;
+app/src/main/assets/js/modules/Renderer.js:            let lift = pt.z * 0.85;
+app/src/main/assets/js/modules/Renderer.js:            let bx = pt.x - 12; // BALL_R
+app/src/main/assets/js/modules/Renderer.js:            let by = pt.y - 12 - lift;
+app/src/main/assets/js/modules/Renderer.js:            let scaleDepth = pt.scaleDepth || 1;
+app/src/main/assets/js/modules/Renderer.js:            let shadowScale = pt.shadowScale || 1;
+app/src/main/assets/js/modules/Renderer.js:            let shadowOpacity = pt.shadowOpacity || 1;
+app/src/main/assets/js/modules/Renderer.js:            
+app/src/main/assets/js/modules/Renderer.js:            let bTransform = 'translate3d(' + bx.toFixed(1) + 'px, ' + by.toFixed(1) + 'px, 0) scale(' + scaleDepth.toFixed(3) + ')';
+app/src/main/assets/js/modules/Renderer.js:            if (Renderer.lastBTransform !== bTransform) {
+app/src/main/assets/js/modules/Renderer.js:                ball.style.transform = bTransform;
+app/src/main/assets/js/modules/Renderer.js:                Renderer.lastBTransform = bTransform;
+app/src/main/assets/js/modules/Renderer.js:            }
+app/src/main/assets/js/modules/Renderer.js:            if (shadow) {
+app/src/main/assets/js/modules/Renderer.js:                let sx = pt.x - 11;
+app/src/main/assets/js/modules/Renderer.js:                let sy = pt.y - 3.5;
+app/src/main/assets/js/modules/Renderer.js:                let sTransform = 'translate3d(' + sx.toFixed(1) + 'px, ' + sy.toFixed(1) + 'px, 0) scale(' + (scaleDepth * shadowScale).toFixed(3) + ')';
+app/src/main/assets/js/modules/Renderer.js:                if (Renderer.lastSTransform !== sTransform) {
+app/src/main/assets/js/modules/Renderer.js:                    shadow.style.transform = sTransform;
+app/src/main/assets/js/modules/Renderer.js:                    shadow.style.opacity = shadowOpacity.toFixed(2);
+app/src/main/assets/js/modules/Renderer.js:                    Renderer.lastSTransform = sTransform;
+app/src/main/assets/js/modules/Renderer.js:                }
+app/src/main/assets/js/modules/Renderer.js:            }
+app/src/main/assets/js/modules/Renderer.js:        }
+app/src/main/assets/js/modules/Renderer.js:        
+app/src/main/assets/js/modules/Renderer.js:        // Render aim UI
+app/src/main/assets/js/modules/Renderer.js:        if (state.aim) {
+app/src/main/assets/js/modules/Renderer.js:            let crosshairEl = Renderer.DOM.crosshairEl;
+app/src/main/assets/js/modules/Renderer.js:            if (crosshairEl) {
+app/src/main/assets/js/modules/Renderer.js:                if (state.aim.crosshair.show) {
+app/src/main/assets/js/modules/Renderer.js:                    let cTransform = 'translate3d(' + state.aim.crosshair.x.toFixed(1) + 'px, ' + state.aim.crosshair.y.toFixed(1) + 'px, 0)';
+app/src/main/assets/js/modules/Renderer.js:                    if (Renderer.lastCTransform !== cTransform) {
+app/src/main/assets/js/modules/Renderer.js:                        crosshairEl.style.transform = cTransform;
+app/src/main/assets/js/modules/Renderer.js:                        Renderer.lastCTransform = cTransform;
+app/src/main/assets/js/modules/Renderer.js:                    }
+app/src/main/assets/js/modules/Renderer.js:                    if (!Renderer.lastCShow) { crosshairEl.classList.add('show'); Renderer.lastCShow = true; }
+app/src/main/assets/js/modules/Renderer.js:                    let locked = state.aim.crosshair.locked;
+app/src/main/assets/js/modules/Renderer.js:                    if (Renderer.lastCLocked !== locked) {
+app/src/main/assets/js/modules/Renderer.js:                        crosshairEl.classList.toggle('locked', locked);
+app/src/main/assets/js/modules/Renderer.js:                        Renderer.lastCLocked = locked;
+app/src/main/assets/js/modules/Renderer.js:                    }
+app/src/main/assets/js/modules/Renderer.js:                } else {
+app/src/main/assets/js/modules/Renderer.js:                    if (Renderer.lastCShow) { crosshairEl.classList.remove('show'); Renderer.lastCShow = false; }
+app/src/main/assets/js/modules/Renderer.js:                }
+app/src/main/assets/js/modules/Renderer.js:            }
+app/src/main/assets/js/modules/Renderer.js:            
+app/src/main/assets/js/modules/Renderer.js:            let powerFillEl = Renderer.DOM.powerFillEl;
+app/src/main/assets/js/modules/Renderer.js:            if (powerFillEl) {
+app/src/main/assets/js/modules/Renderer.js:                let pHeight = (state.aim.powerPct || 0) + '%';
+app/src/main/assets/js/modules/Renderer.js:                if (Renderer.lastPHeight !== pHeight) {
+app/src/main/assets/js/modules/Renderer.js:                    powerFillEl.style.height = pHeight;
+app/src/main/assets/js/modules/Renderer.js:                    Renderer.lastPHeight = pHeight;
+app/src/main/assets/js/modules/Renderer.js:                }
+app/src/main/assets/js/modules/Renderer.js:            }
+app/src/main/assets/js/modules/Renderer.js:            
+app/src/main/assets/js/modules/Renderer.js:            // Draw preview only if dirty
+app/src/main/assets/js/modules/Renderer.js:            if (state.aim.previewDirty) {
+app/src/main/assets/js/modules/Renderer.js:                let canvas = Renderer.DOM.canvas;
+app/src/main/assets/js/modules/Renderer.js:                if (canvas) {
+app/src/main/assets/js/modules/Renderer.js:                    let ctx = Renderer.DOM.ctx;
+app/src/main/assets/js/modules/Renderer.js:                    if (state.aim.preview) {
+app/src/main/assets/js/modules/Renderer.js:                        Renderer.renderPreview(ctx, state.aim.preview.sol, state.aim.preview.pullStart, true, state.aim.preview.grazedRim, state.aim.preview.firstRimSample);
+app/src/main/assets/js/modules/Renderer.js:                    } else {
+app/src/main/assets/js/modules/Renderer.js:                        ctx.clearRect(0, 0, canvas.width, canvas.height);
+app/src/main/assets/js/modules/Renderer.js:                    }
+app/src/main/assets/js/modules/Renderer.js:                }
+app/src/main/assets/js/modules/Renderer.js:                state.aim.previewDirty = false;
+app/src/main/assets/js/modules/Renderer.js:            }
+app/src/main/assets/js/modules/Renderer.js:            
+app/src/main/assets/js/modules/Renderer.js:            // Target cup
+app/src/main/assets/js/modules/Renderer.js:            let targetCup = state.aim.targetCup;
+app/src/main/assets/js/modules/Renderer.js:            if (Renderer.lastTargetCup !== targetCup) {
+app/src/main/assets/js/modules/Renderer.js:                if (Renderer.lastTargetCup) Renderer.lastTargetCup.classList.remove('cup-target');
+app/src/main/assets/js/modules/Renderer.js:                if (targetCup) targetCup.classList.add('cup-target');
+app/src/main/assets/js/modules/Renderer.js:                Renderer.lastTargetCup = targetCup;
+app/src/main/assets/js/modules/Renderer.js:            }
+app/src/main/assets/js/modules/Renderer.js:        }
+app/src/main/assets/js/modules/Renderer.js:        
+app/src/main/assets/js/modules/Renderer.js:        if (window.UIRenderer) UIRenderer.render(state);
+app/src/main/assets/js/modules/Renderer.js:    }
+app/src/main/assets/js/modules/Renderer.js:
+app/src/main/assets/js/modules/Renderer.js:    static sizeAimSvg() {
+app/src/main/assets/js/modules/Renderer.js:        qsa('.cup').forEach(function(c) {
+app/src/main/assets/js/modules/Renderer.js:            delete c.dataset.cx;
+app/src/main/assets/js/modules/Renderer.js:            delete c.dataset.cy;
+app/src/main/assets/js/modules/Renderer.js:        });
+app/src/main/assets/js/modules/Renderer.js:        if(window.Aim && window.Aim.resizeCanvas) window.Aim.resizeCanvas(); else if(window.Aim && window.Aim.resizeSvg) window.Aim.resizeSvg();
+app/src/main/assets/js/modules/Renderer.js:    }
+app/src/main/assets/js/modules/Renderer.js:}
+app/src/main/assets/js/modules/Renderer.js:window.Renderer = Renderer;
+app/src/main/assets/js/modules/Renderer.js:
+app/src/main/assets/js/modules/Renderer.js:window.sizeAimSvg = Renderer.sizeAimSvg;
+app/src/main/assets/js/modules/ThrowController.js:class ThrowController {
+app/src/main/assets/js/modules/ThrowController.js:    constructor(engine, predictor){
+app/src/main/assets/js/modules/ThrowController.js:      this.engine = engine;
+app/src/main/assets/js/modules/ThrowController.js:      this.predictor = predictor;
+app/src/main/assets/js/modules/ThrowController.js:    }
+app/src/main/assets/js/modules/ThrowController.js:
+app/src/main/assets/js/modules/ThrowController.js:    
+app/src/main/assets/js/modules/ThrowController.js:    playback(samples, dt, depthRef){
+app/src/main/assets/js/modules/ThrowController.js:      var self = this;
+app/src/main/assets/js/modules/ThrowController.js:      return new Promise(function(resolve){
+app/src/main/assets/js/modules/ThrowController.js:        var totalMs = (samples.length - 1) * dt * 1000;
+app/src/main/assets/js/modules/ThrowController.js:        var playMs = Math.min(totalMs, 2500);
+app/src/main/assets/js/modules/ThrowController.js:        
+app/src/main/assets/js/modules/ThrowController.js:        if (window.GameStateManager) {
+app/src/main/assets/js/modules/ThrowController.js:            let state = GameStateManager.getState();
+app/src/main/assets/js/modules/ThrowController.js:            state.throwAnim = {
+app/src/main/assets/js/modules/ThrowController.js:                samples: samples,
+app/src/main/assets/js/modules/ThrowController.js:                dt: dt,
+app/src/main/assets/js/modules/ThrowController.js:                depthRef: depthRef,
+app/src/main/assets/js/modules/ThrowController.js:                elapsed: 0,
+app/src/main/assets/js/modules/ThrowController.js:                playMs: playMs,
+app/src/main/assets/js/modules/ThrowController.js:                onComplete: () => {
+app/src/main/assets/js/modules/ThrowController.js:                    resolve();
+app/src/main/assets/js/modules/ThrowController.js:                }
+app/src/main/assets/js/modules/ThrowController.js:            };
+app/src/main/assets/js/modules/ThrowController.js:        } else {
+app/src/main/assets/js/modules/ThrowController.js:            resolve();
+app/src/main/assets/js/modules/ThrowController.js:        }
+app/src/main/assets/js/modules/ThrowController.js:      });
+app/src/main/assets/js/modules/ThrowController.js:    }
+app/src/main/assets/js/modules/ThrowController.js:
+app/src/main/assets/js/modules/ThrowController.js:
+app/src/main/assets/js/modules/ThrowController.js:    performPlayerThrow(sol){
+app/src/main/assets/js/modules/ThrowController.js:      var m = state.match;
+app/src/main/assets/js/modules/ThrowController.js:      m.busy = true;
+app/src/main/assets/js/modules/ThrowController.js:      m.attempts++;
+app/src/main/assets/js/modules/ThrowController.js:      
+app/src/main/assets/js/modules/ThrowController.js:      var remainingCups = qsa('#ai-cups .cup:not(.hit)');
+app/src/main/assets/js/modules/ThrowController.js:      if(!remainingCups.length){ finishMatch('win'); m.busy = false; return; }
+app/src/main/assets/js/modules/ThrowController.js:      
+app/src/main/assets/js/modules/ThrowController.js:      var willHit = sol.outcome === 'hit' && !!sol.hitCupEl;
+app/src/main/assets/js/modules/ThrowController.js:      var self = this;
+app/src/main/assets/js/modules/ThrowController.js:      
+app/src/main/assets/js/modules/ThrowController.js:      this.playback(sol.samples, this.engine.DT, sol.depthRef).then(function(){
+app/src/main/assets/js/modules/ThrowController.js:        if(willHit){
+app/src/main/assets/js/modules/ThrowController.js:          m.hits++;
+app/src/main/assets/js/modules/ThrowController.js:          sol.hitCupEl.classList.add('hit');
+app/src/main/assets/js/modules/ThrowController.js:          m.aiRemaining--;
+app/src/main/assets/js/modules/ThrowController.js:          m.trickMeter = clamp(m.trickMeter + 16, 0, 100);
+app/src/main/assets/js/modules/ThrowController.js:          
+app/src/main/assets/js/modules/ThrowController.js:          SFX.hit();
+app/src/main/assets/js/modules/ThrowController.js:          toast('CUP DESTROYED');
+app/src/main/assets/js/modules/ThrowController.js:          haptic(20);
+app/src/main/assets/js/modules/ThrowController.js:        } else {
+app/src/main/assets/js/modules/ThrowController.js:          SFX.miss();
+app/src/main/assets/js/modules/ThrowController.js:          toast(self.predictor.grazedRim(sol) ? 'RIM OUT — SO CLOSE' : 'SHOT MISSED');
+app/src/main/assets/js/modules/ThrowController.js:        }
+app/src/main/assets/js/modules/ThrowController.js:        
+app/src/main/assets/js/modules/ThrowController.js:        resetBallPosition('player');
+app/src/main/assets/js/modules/ThrowController.js:        
+app/src/main/assets/js/modules/ThrowController.js:        
+app/src/main/assets/js/modules/ThrowController.js:        if(m.aiRemaining <= 0){ finishMatch('win'); m.busy=false; return; }
+app/src/main/assets/js/modules/ThrowController.js:        
+app/src/main/assets/js/modules/ThrowController.js:        m.turn = 'ai';
+app/src/main/assets/js/modules/ThrowController.js:        m.busy = false;
+app/src/main/assets/js/modules/ThrowController.js:        setTimeout(function(){ window.AI.performAiThrow(); }, 900);
+app/src/main/assets/js/modules/ThrowController.js:      });
+app/src/main/assets/js/modules/ThrowController.js:    }
+app/src/main/assets/js/modules/ThrowController.js:}
+app/src/main/assets/js/modules/ThrowController.js:window.ThrowController = ThrowController;
+app/src/main/assets/js/modules/TrajectoryPredictor.js:class TrajectoryPredictor {
+app/src/main/assets/js/modules/TrajectoryPredictor.js:    constructor(engine){
+app/src/main/assets/js/modules/TrajectoryPredictor.js:      this.samplePool = [];
+app/src/main/assets/js/modules/TrajectoryPredictor.js:      for(var i=0; i<300; i++) this.samplePool.push({x:0,y:0,z:0,event:null});
+app/src/main/assets/js/modules/TrajectoryPredictor.js:      this.engine = engine;
+app/src/main/assets/js/modules/TrajectoryPredictor.js:    }
+app/src/main/assets/js/modules/TrajectoryPredictor.js:    
+app/src/main/assets/js/modules/TrajectoryPredictor.js:    simulate(init, cupEls, tableRect, difficulty, windAccel){
+app/src/main/assets/js/modules/TrajectoryPredictor.js:      if (!this.cachedCups || this.lastCupEls !== cupEls || this.lastDifficulty !== difficulty) {
+app/src/main/assets/js/modules/TrajectoryPredictor.js:          this.cachedCups = this.engine.parseCups(cupEls, difficulty);
+app/src/main/assets/js/modules/TrajectoryPredictor.js:          this.lastCupEls = cupEls;
+app/src/main/assets/js/modules/TrajectoryPredictor.js:          this.lastDifficulty = difficulty;
+app/src/main/assets/js/modules/TrajectoryPredictor.js:      }
+app/src/main/assets/js/modules/TrajectoryPredictor.js:      
+app/src/main/assets/js/modules/TrajectoryPredictor.js:      var eng = this.engine;
+app/src/main/assets/js/modules/TrajectoryPredictor.js:      if (!this.cachedState) this.cachedState = {};
+app/src/main/assets/js/modules/TrajectoryPredictor.js:      var s = this.cachedState;
+app/src/main/assets/js/modules/TrajectoryPredictor.js:      s.x = init.x; s.y = init.y; s.z = init.z || 0;
+app/src/main/assets/js/modules/TrajectoryPredictor.js:      s.vx = init.vx; s.vy = init.vy; s.vz = init.vz;
+app/src/main/assets/js/modules/TrajectoryPredictor.js:      s.angularVelocityX = init.angularVelocityX || 0; s.angularVelocityZ = init.angularVelocityZ || 0;
+app/src/main/assets/js/modules/TrajectoryPredictor.js:      s.bounces = 0; s.insideCup = null; s.settled = false; s.outcome = null; s.hitCupEl = null; s.event = null;
+app/src/main/assets/js/modules/TrajectoryPredictor.js:      
+app/src/main/assets/js/modules/TrajectoryPredictor.js:      var samples = this.previewSamples;
+app/src/main/assets/js/modules/TrajectoryPredictor.js:      if (!samples) {
+app/src/main/assets/js/modules/TrajectoryPredictor.js:          samples = [];
+app/src/main/assets/js/modules/TrajectoryPredictor.js:          this.previewSamples = samples;
+app/src/main/assets/js/modules/TrajectoryPredictor.js:      }
+app/src/main/assets/js/modules/TrajectoryPredictor.js:      samples.length = 0;
+app/src/main/assets/js/modules/TrajectoryPredictor.js:      var sIdx = 0;
+app/src/main/assets/js/modules/TrajectoryPredictor.js:      var p0 = this.samplePool[sIdx++];
+app/src/main/assets/js/modules/TrajectoryPredictor.js:      p0.x = s.x; p0.y = s.y; p0.z = s.z; p0.event = null;
+app/src/main/assets/js/modules/TrajectoryPredictor.js:      samples.push(p0);
+app/src/main/assets/js/modules/TrajectoryPredictor.js:      
+app/src/main/assets/js/modules/TrajectoryPredictor.js:      var dt = eng.DT;
+app/src/main/assets/js/modules/TrajectoryPredictor.js:      var maxSteps = Math.round(eng.MAX_SIM_SECONDS / dt);
+app/src/main/assets/js/modules/TrajectoryPredictor.js:      
+app/src/main/assets/js/modules/TrajectoryPredictor.js:      for(var i=0; i<maxSteps && !s.settled; i++){
+app/src/main/assets/js/modules/TrajectoryPredictor.js:        s.event = null;
+app/src/main/assets/js/modules/TrajectoryPredictor.js:        eng.step(s, dt, tableRect, this.cachedCups, windAccel);
+app/src/main/assets/js/modules/TrajectoryPredictor.js:        
+app/src/main/assets/js/modules/TrajectoryPredictor.js:        var hs = Math.sqrt(s.vx*s.vx + s.vy*s.vy);
+app/src/main/assets/js/modules/TrajectoryPredictor.js:        if(s.insideCup){
+app/src/main/assets/js/modules/TrajectoryPredictor.js:          if(Math.abs(s.vz) < 25 && s.z <= 1){ 
+app/src/main/assets/js/modules/TrajectoryPredictor.js:              s.settled = true; 
+app/src/main/assets/js/modules/TrajectoryPredictor.js:              s.outcome = 'hit'; 
+app/src/main/assets/js/modules/TrajectoryPredictor.js:              s.hitCupEl = s.insideCup.el; 
+app/src/main/assets/js/modules/TrajectoryPredictor.js:          }
+app/src/main/assets/js/modules/TrajectoryPredictor.js:        } else if(s.z <= 0.5 && hs < eng.STOP_SPEED){
+app/src/main/assets/js/modules/TrajectoryPredictor.js:          s.settled = true; s.outcome = s.outcome || 'miss';
+app/src/main/assets/js/modules/TrajectoryPredictor.js:        }
+app/src/main/assets/js/modules/TrajectoryPredictor.js:        
+app/src/main/assets/js/modules/TrajectoryPredictor.js:        if (sIdx < this.samplePool.length) {
+app/src/main/assets/js/modules/TrajectoryPredictor.js:          var pN = this.samplePool[sIdx++];
+app/src/main/assets/js/modules/TrajectoryPredictor.js:          pN.x = s.x; pN.y = s.y; pN.z = Math.max(0, s.z); pN.event = s.event;
+app/src/main/assets/js/modules/TrajectoryPredictor.js:          samples.push(pN);
+app/src/main/assets/js/modules/TrajectoryPredictor.js:        } else {
+app/src/main/assets/js/modules/TrajectoryPredictor.js:          samples.push({ x:s.x, y:s.y, z:Math.max(0,s.z), event:s.event });
+app/src/main/assets/js/modules/TrajectoryPredictor.js:        }
+app/src/main/assets/js/modules/TrajectoryPredictor.js:      }
+app/src/main/assets/js/modules/TrajectoryPredictor.js:      
+app/src/main/assets/js/modules/TrajectoryPredictor.js:      if(!s.settled) s.outcome = s.outcome || 'miss';
+app/src/main/assets/js/modules/TrajectoryPredictor.js:      if (!this.cachedResult) this.cachedResult = {};
+app/src/main/assets/js/modules/TrajectoryPredictor.js:      this.cachedResult.samples = samples;
+app/src/main/assets/js/modules/TrajectoryPredictor.js:      this.cachedResult.outcome = s.outcome;
+app/src/main/assets/js/modules/TrajectoryPredictor.js:      this.cachedResult.hitCupEl = s.hitCupEl;
+app/src/main/assets/js/modules/TrajectoryPredictor.js:      this.cachedResult.finalX = s.x;
+app/src/main/assets/js/modules/TrajectoryPredictor.js:      this.cachedResult.finalY = s.y;
+app/src/main/assets/js/modules/TrajectoryPredictor.js:      this.cachedResult.dt = dt;
+app/src/main/assets/js/modules/TrajectoryPredictor.js:      return this.cachedResult;
+app/src/main/assets/js/modules/TrajectoryPredictor.js:    }
+app/src/main/assets/js/modules/TrajectoryPredictor.js:    
+app/src/main/assets/js/modules/TrajectoryPredictor.js:    grazedRim(sim){
+app/src/main/assets/js/modules/TrajectoryPredictor.js:      for(var i=0; i<sim.samples.length; i++){
+app/src/main/assets/js/modules/TrajectoryPredictor.js:        var ev = sim.samples[i].event;
+app/src/main/assets/js/modules/TrajectoryPredictor.js:        if(ev === 'rim' || ev === 'lip-in' || ev === 'lip-out') return true;
+app/src/main/assets/js/modules/TrajectoryPredictor.js:      }
+app/src/main/assets/js/modules/TrajectoryPredictor.js:      return false;
+app/src/main/assets/js/modules/TrajectoryPredictor.js:    }
+app/src/main/assets/js/modules/TrajectoryPredictor.js:    
+app/src/main/assets/js/modules/TrajectoryPredictor.js:    firstRimSample(sim){
+app/src/main/assets/js/modules/TrajectoryPredictor.js:      for(var i=0; i<sim.samples.length; i++){
+app/src/main/assets/js/modules/TrajectoryPredictor.js:        var ev = sim.samples[i].event;
+app/src/main/assets/js/modules/TrajectoryPredictor.js:        if(ev === 'rim' || ev === 'lip-in' || ev === 'lip-out') return sim.samples[i];
+app/src/main/assets/js/modules/TrajectoryPredictor.js:      }
+app/src/main/assets/js/modules/TrajectoryPredictor.js:      return null;
+app/src/main/assets/js/modules/TrajectoryPredictor.js:    }
+app/src/main/assets/js/modules/TrajectoryPredictor.js:}
+app/src/main/assets/js/modules/TrajectoryPredictor.js:window.TrajectoryPredictor = TrajectoryPredictor;
+app/src/main/assets/js/modules/UIRenderer.js:
+app/src/main/assets/js/modules/UIRenderer.js:class UIRenderer {
+app/src/main/assets/js/modules/UIRenderer.js:    
+app/src/main/assets/js/modules/UIRenderer.js:    static DOM = { initialized: false };
+app/src/main/assets/js/modules/UIRenderer.js:    static initDOM() {
+app/src/main/assets/js/modules/UIRenderer.js:        if (UIRenderer.DOM.initialized) return;
+app/src/main/assets/js/modules/UIRenderer.js:        UIRenderer.DOM.statsHudEl = document.getElementById('stats-hud');
+app/src/main/assets/js/modules/UIRenderer.js:        UIRenderer.DOM.arcFillEl = document.getElementById('arc-fill');
+app/src/main/assets/js/modules/UIRenderer.js:        UIRenderer.DOM.spinFillEl = document.getElementById('spin-fill');
+app/src/main/assets/js/modules/UIRenderer.js:        UIRenderer.DOM.releaseFillEl = document.getElementById('release-fill');
+app/src/main/assets/js/modules/UIRenderer.js:        UIRenderer.DOM.releaseReadoutEl = document.getElementById('release-readout');
+app/src/main/assets/js/modules/UIRenderer.js:        UIRenderer.DOM.pScore = document.getElementById('score-player');
+app/src/main/assets/js/modules/UIRenderer.js:        UIRenderer.DOM.aScore = document.getElementById('score-ai');
+app/src/main/assets/js/modules/UIRenderer.js:        UIRenderer.DOM.turnInd = document.getElementById('turn-indicator');
+app/src/main/assets/js/modules/UIRenderer.js:        UIRenderer.DOM.trickBtn = document.getElementById('btn-trick-shot');
+app/src/main/assets/js/modules/UIRenderer.js:        UIRenderer.DOM.trickFill = document.getElementById('trick-fill');
+app/src/main/assets/js/modules/UIRenderer.js:        UIRenderer.DOM.hintEl = document.getElementById('aim-hint');
+app/src/main/assets/js/modules/UIRenderer.js:        UIRenderer.DOM.powerReadoutEl = document.getElementById('power-readout');
+app/src/main/assets/js/modules/UIRenderer.js:        UIRenderer.DOM.initialized = true;
+app/src/main/assets/js/modules/UIRenderer.js:    }
+app/src/main/assets/js/modules/UIRenderer.js:
+app/src/main/assets/js/modules/UIRenderer.js:    static render(state) {
+app/src/main/assets/js/modules/UIRenderer.js:        UIRenderer.initDOM();
+app/src/main/assets/js/modules/UIRenderer.js:        
+app/src/main/assets/js/modules/UIRenderer.js:        var m = state.match;
+app/src/main/assets/js/modules/UIRenderer.js:        if(m) {
+app/src/main/assets/js/modules/UIRenderer.js:            if (UIRenderer.DOM.pScore) {
+app/src/main/assets/js/modules/UIRenderer.js:                let pv = 10 - m.aiRemaining;
+app/src/main/assets/js/modules/UIRenderer.js:                if (UIRenderer.lastPScore !== pv) {
+app/src/main/assets/js/modules/UIRenderer.js:                    UIRenderer.DOM.pScore.textContent = pv;
+app/src/main/assets/js/modules/UIRenderer.js:                    UIRenderer.lastPScore = pv;
+app/src/main/assets/js/modules/UIRenderer.js:                }
+app/src/main/assets/js/modules/UIRenderer.js:            }
+app/src/main/assets/js/modules/UIRenderer.js:            if (UIRenderer.DOM.aScore) {
+app/src/main/assets/js/modules/UIRenderer.js:                let av = 10 - m.playerRemaining;
+app/src/main/assets/js/modules/UIRenderer.js:                if (UIRenderer.lastAScore !== av) {
+app/src/main/assets/js/modules/UIRenderer.js:                    UIRenderer.DOM.aScore.textContent = av;
+app/src/main/assets/js/modules/UIRenderer.js:                    UIRenderer.lastAScore = av;
+app/src/main/assets/js/modules/UIRenderer.js:                }
+app/src/main/assets/js/modules/UIRenderer.js:            }
+app/src/main/assets/js/modules/UIRenderer.js:            if (UIRenderer.DOM.turnInd) {
+app/src/main/assets/js/modules/UIRenderer.js:                let tText = m.turn === 'player' ? 'YOUR TURN' : 'AI TURN';
+app/src/main/assets/js/modules/UIRenderer.js:                let tColor = m.turn === 'player' ? '#00f3ff' : '#ff5566';
+app/src/main/assets/js/modules/UIRenderer.js:                if (UIRenderer.lastTurnText !== tText) {
+app/src/main/assets/js/modules/UIRenderer.js:                    UIRenderer.DOM.turnInd.textContent = tText;
+app/src/main/assets/js/modules/UIRenderer.js:                    UIRenderer.DOM.turnInd.style.color = tColor;
+app/src/main/assets/js/modules/UIRenderer.js:                    UIRenderer.lastTurnText = tText;
+app/src/main/assets/js/modules/UIRenderer.js:                }
+app/src/main/assets/js/modules/UIRenderer.js:            }
+app/src/main/assets/js/modules/UIRenderer.js:            if (UIRenderer.DOM.trickFill && UIRenderer.lastTrickMeter !== m.trickMeter) {
+app/src/main/assets/js/modules/UIRenderer.js:                UIRenderer.DOM.trickFill.style.width = m.trickMeter + '%';
+app/src/main/assets/js/modules/UIRenderer.js:                UIRenderer.lastTrickMeter = m.trickMeter;
+app/src/main/assets/js/modules/UIRenderer.js:                
+app/src/main/assets/js/modules/UIRenderer.js:                if (UIRenderer.DOM.trickBtn) {
+app/src/main/assets/js/modules/UIRenderer.js:                    if(m.trickMeter >= 100){
+app/src/main/assets/js/modules/UIRenderer.js:                        UIRenderer.DOM.trickBtn.classList.add('ready');
+app/src/main/assets/js/modules/UIRenderer.js:                    } else {
+app/src/main/assets/js/modules/UIRenderer.js:                        UIRenderer.DOM.trickBtn.classList.remove('ready');
+app/src/main/assets/js/modules/UIRenderer.js:                        UIRenderer.DOM.trickBtn.classList.remove('trick-armed');
+app/src/main/assets/js/modules/UIRenderer.js:                    }
+app/src/main/assets/js/modules/UIRenderer.js:                }
+app/src/main/assets/js/modules/UIRenderer.js:            }
+app/src/main/assets/js/modules/UIRenderer.js:        }
+app/src/main/assets/js/modules/UIRenderer.js:        
+app/src/main/assets/js/modules/UIRenderer.js:        if (state.aim) {
+app/src/main/assets/js/modules/UIRenderer.js:            if (UIRenderer.DOM.hintEl) {
+app/src/main/assets/js/modules/UIRenderer.js:                if (UIRenderer.lastHintText !== state.aim.hintText) {
+app/src/main/assets/js/modules/UIRenderer.js:                    if(state.aim.hintText !== undefined) UIRenderer.DOM.hintEl.textContent = state.aim.hintText;
+app/src/main/assets/js/modules/UIRenderer.js:                    UIRenderer.lastHintText = state.aim.hintText;
+app/src/main/assets/js/modules/UIRenderer.js:                }
+app/src/main/assets/js/modules/UIRenderer.js:                if (UIRenderer.lastHintOpacity !== state.aim.hintOpacity) {
+app/src/main/assets/js/modules/UIRenderer.js:                    if(state.aim.hintOpacity !== undefined) UIRenderer.DOM.hintEl.style.opacity = state.aim.hintOpacity;
+app/src/main/assets/js/modules/UIRenderer.js:                    UIRenderer.lastHintOpacity = state.aim.hintOpacity;
+app/src/main/assets/js/modules/UIRenderer.js:                }
+app/src/main/assets/js/modules/UIRenderer.js:            }
+app/src/main/assets/js/modules/UIRenderer.js:            if (UIRenderer.DOM.powerReadoutEl) {
+app/src/main/assets/js/modules/UIRenderer.js:                let pText = (state.aim.powerPct || 0) + '%';
+app/src/main/assets/js/modules/UIRenderer.js:                if (UIRenderer.lastPowerText !== pText) {
+app/src/main/assets/js/modules/UIRenderer.js:                    UIRenderer.DOM.powerReadoutEl.textContent = pText;
+app/src/main/assets/js/modules/UIRenderer.js:                    UIRenderer.lastPowerText = pText;
+app/src/main/assets/js/modules/UIRenderer.js:                }
+app/src/main/assets/js/modules/UIRenderer.js:            }
+app/src/main/assets/js/modules/UIRenderer.js:        }
+app/src/main/assets/js/modules/UIRenderer.js:        
+app/src/main/assets/js/modules/UIRenderer.js:        if (state.aim && state.aim.statsHudData) {
+app/src/main/assets/js/modules/UIRenderer.js:            let d = state.aim.statsHudData;
+app/src/main/assets/js/modules/UIRenderer.js:            if (UIRenderer.DOM.statsHudEl) {
+app/src/main/assets/js/modules/UIRenderer.js:                if (d.show && !UIRenderer.lastStatsShow) {
+app/src/main/assets/js/modules/UIRenderer.js:                    UIRenderer.DOM.statsHudEl.classList.add('show');
+app/src/main/assets/js/modules/UIRenderer.js:                    UIRenderer.lastStatsShow = true;
+app/src/main/assets/js/modules/UIRenderer.js:                } else if (!d.show && UIRenderer.lastStatsShow) {
+app/src/main/assets/js/modules/UIRenderer.js:                    UIRenderer.DOM.statsHudEl.classList.remove('show');
+app/src/main/assets/js/modules/UIRenderer.js:                    UIRenderer.lastStatsShow = false;
+app/src/main/assets/js/modules/UIRenderer.js:                }
+app/src/main/assets/js/modules/UIRenderer.js:            }
+app/src/main/assets/js/modules/UIRenderer.js:            
+app/src/main/assets/js/modules/UIRenderer.js:            if (d.show) {
+app/src/main/assets/js/modules/UIRenderer.js:                if (UIRenderer.DOM.arcFillEl && UIRenderer.lastArcPct !== d.arcPct) {
+app/src/main/assets/js/modules/UIRenderer.js:                    UIRenderer.DOM.arcFillEl.style.width = d.arcPct + '%';
+app/src/main/assets/js/modules/UIRenderer.js:                    UIRenderer.lastArcPct = d.arcPct;
+app/src/main/assets/js/modules/UIRenderer.js:                }
+app/src/main/assets/js/modules/UIRenderer.js:                
+app/src/main/assets/js/modules/UIRenderer.js:                if (UIRenderer.DOM.spinFillEl && UIRenderer.lastSpinPct !== d.spinPct) {
+app/src/main/assets/js/modules/UIRenderer.js:                    UIRenderer.DOM.spinFillEl.style.width = Math.abs(d.spinPct) + '%';
+app/src/main/assets/js/modules/UIRenderer.js:                    UIRenderer.DOM.spinFillEl.style.left = d.spinPct < 0 ? (50 - Math.abs(d.spinPct)/2) + '%' : '50%';
+app/src/main/assets/js/modules/UIRenderer.js:                    UIRenderer.DOM.spinFillEl.className = 'aim-stat-fill ' + (d.spinPct < 0 ? 'fill-magenta' : 'fill-primary');
+app/src/main/assets/js/modules/UIRenderer.js:                    UIRenderer.lastSpinPct = d.spinPct;
+app/src/main/assets/js/modules/UIRenderer.js:                }
+app/src/main/assets/js/modules/UIRenderer.js:                
+app/src/main/assets/js/modules/UIRenderer.js:                if (UIRenderer.DOM.releaseFillEl && (UIRenderer.lastRelPct !== d.relPct || UIRenderer.lastOutcome !== d.outcome)) {
+app/src/main/assets/js/modules/UIRenderer.js:                    UIRenderer.DOM.releaseFillEl.style.width = d.relPct + '%';
+app/src/main/assets/js/modules/UIRenderer.js:                    UIRenderer.DOM.releaseFillEl.className = 'aim-stat-fill ' + (d.outcome === 'hit' ? 'fill-green' : (d.relPct > 70 ? 'fill-gold' : 'fill-magenta'));
+app/src/main/assets/js/modules/UIRenderer.js:                    
+app/src/main/assets/js/modules/UIRenderer.js:                    if (UIRenderer.DOM.releaseReadoutEl) {
+app/src/main/assets/js/modules/UIRenderer.js:                        UIRenderer.DOM.releaseReadoutEl.textContent = d.relPct + '% ' + (d.outcome === 'hit' ? 'PERFECT' : (d.relPct > 70 ? 'GOOD' : 'OVERPOWERED'));
+app/src/main/assets/js/modules/UIRenderer.js:                        UIRenderer.DOM.releaseReadoutEl.style.color = d.outcome === 'hit' ? '#39ff8c' : (d.relPct > 70 ? '#ffd23f' : '#ff5566');
+app/src/main/assets/js/modules/UIRenderer.js:                    }
+app/src/main/assets/js/modules/UIRenderer.js:                    
+app/src/main/assets/js/modules/UIRenderer.js:                    UIRenderer.lastRelPct = d.relPct;
+app/src/main/assets/js/modules/UIRenderer.js:                    UIRenderer.lastOutcome = d.outcome;
+app/src/main/assets/js/modules/UIRenderer.js:                }
+app/src/main/assets/js/modules/UIRenderer.js:            }
+app/src/main/assets/js/modules/UIRenderer.js:        }
+app/src/main/assets/js/modules/UIRenderer.js:    }
+app/src/main/assets/js/modules/UIRenderer.js:
+app/src/main/assets/js/modules/UIRenderer.js:}
+app/src/main/assets/js/modules/UIRenderer.js:window.toast = UIRenderer.toast;
+app/src/main/assets/js/modules/UIRenderer.js:window.showScreen = UIRenderer.showScreen;
+app/src/main/assets/js/modules/UIRenderer.js:window.openPanel = UIRenderer.openPanel;
+app/src/main/assets/js/modules/UIRenderer.js:window.closePanel = UIRenderer.closePanel;
+app/src/main/assets/js/modules/UIRenderer.js:window.openModal = UIRenderer.openModal;
+app/src/main/assets/js/modules/UIRenderer.js:window.closeModal = UIRenderer.closeModal;
+app/src/main/assets/js/modules/Util.js:
+app/src/main/assets/js/modules/Util.js:function $(id){ return document.getElementById(id); }
+app/src/main/assets/js/modules/Util.js:function qsa(sel, ctx){ return Array.prototype.slice.call((ctx||document).querySelectorAll(sel)); }
+app/src/main/assets/js/modules/Util.js:function clamp(v,min,max){ return Math.max(min, Math.min(max, v)); }
+app/src/main/assets/js/modules/Util.js:function rand(min,max){ return Math.random()*(max-min)+min; }
+app/src/main/assets/js/modules/Util.js:function pick(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+app/src/main/assets/js/modules/Util.js:window.$ = $;
+app/src/main/assets/js/modules/Util.js:window.qsa = qsa;
+app/src/main/assets/js/modules/Util.js:window.clamp = clamp;
+app/src/main/assets/js/modules/Util.js:window.rand = rand;
+app/src/main/assets/js/modules/Util.js:window.pick = pick;
