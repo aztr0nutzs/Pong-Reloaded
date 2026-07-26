@@ -1,0 +1,1032 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"/>
+<title>CYBER-PONG ARENA | NEON OVERDRIVE</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=Rajdhani:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<script src="js/tailwindcss.js"></script>
+<script id="tailwind-config">
+  tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        colors: {
+          primary: "#00f3ff",
+          "primary-dim": "#00c4cc",
+          secondary: "#7000ff",
+          "secondary-light": "#bd93f9",
+          magenta: "#ff2e78",
+          gold: "#ffc233",
+          ink: "#e6f7f8",
+          "ink-dim": "#8aa0a2",
+          surface: "#000000",
+          s1: "#08090a",
+          s2: "#0e1112",
+          s3: "#171b1c",
+          outline: "#243133"
+        },
+        fontFamily: {
+          display: ["Orbitron", "sans-serif"],
+          body: ["Rajdhani", "sans-serif"],
+          mono: ['"Space Grotesk"', "monospace"]
+        },
+        boxShadow: {
+          "glow-cyan": "0 0 20px rgba(0,243,255,0.45)",
+          "glow-purple": "0 0 20px rgba(112,0,255,0.45)"
+        }
+      }
+    }
+  };
+</script>
+<style>
+  :root{
+    --c-player:#00f3ff;
+    --c-ai:#bd93f9;
+    --ball-color:#00f3ff;
+  }
+  *{ -webkit-tap-highlight-color: transparent; }
+  html,body{ height:100%; background:#000; overscroll-behavior:none; }
+  body{
+    font-family:'Rajdhani',sans-serif;
+    color:#e6f7f8;
+    min-height: 100%; height: 100%;
+    overflow:hidden;
+    user-select:none;
+  }
+  .font-display{ font-family:'Orbitron',sans-serif; }
+  .font-mono{ font-family:'Space Grotesk',monospace; }
+  .italic-techno{ font-style:italic; transform:skewX(-6deg); display:inline-block; }
+  .material-symbols-outlined{ font-variation-settings:'FILL' 0,'wght' 500,'GRAD' 0,'opsz' 24; }
+  .fill-icon{ font-variation-settings:'FILL' 1,'wght' 500,'GRAD' 0,'opsz' 24 !important; }
+
+  /* ---------- Shell ---------- */
+  #app{
+    position:absolute;
+    inset:0;
+    width: 100%;
+    height: 100%;
+    background:#000;
+    overflow:hidden;
+  }
+  .carbon-texture{
+    background:
+      linear-gradient(27deg, #151515 5px, transparent 5px) 0 5px,
+      linear-gradient(207deg, #151515 5px, transparent 5px) 10px 0px,
+      linear-gradient(27deg, #222 5px, transparent 5px) 0px 10px,
+      linear-gradient(207deg, #222 5px, transparent 5px) 10px 5px,
+      linear-gradient(90deg, #1b1b1b 10px, transparent 10px),
+      linear-gradient(#1d1d1d 25%, #1a1a1a 25%, #1a1a1a 50%, transparent 50%, transparent 75%, #242424 75%, #242424 100%);
+    background-size: 20px 20px;
+    opacity: 0.45;
+    mix-blend-mode: overlay;
+  }
+
+  /* ambient particle field (lightweight CSS substitute for heavier WebGL fx) */
+  .particle-field{ position:absolute; inset:0; overflow:hidden; pointer-events:none; }
+  .particle{
+    position:absolute; border-radius:50%;
+    background:radial-gradient(circle, rgba(0,243,255,0.9) 0%, rgba(0,243,255,0) 70%);
+    animation: drift linear infinite;
+    opacity:0.5;
+  }
+  @keyframes drift{
+    0%{ transform:translateY(0) translateX(0); }
+    100%{ transform:translateY(-140px) translateX(20px); }
+  }
+
+  @keyframes scanning{
+    0%{ transform:translateY(-100%); opacity:0; }
+    50%{ opacity:0.35; }
+    100%{ transform:translateY(100%); opacity:0; }
+  }
+  .scan-line{ position:relative; overflow:hidden; }
+  .scan-line::after{
+    content:""; position:absolute; top:0; left:0; width:100%; height:2px;
+    background:linear-gradient(90deg, transparent, #00f3ff, transparent);
+    animation:scanning 3s linear infinite; pointer-events:none;
+  }
+
+  .glass-panel{
+    backdrop-filter:blur(22px); -webkit-backdrop-filter:blur(22px);
+    background:rgba(0,0,0,0.82);
+    border:1px solid rgba(0,243,255,0.25);
+    box-shadow:inset 0 0 12px rgba(0,243,255,0.08), 0 0 18px rgba(112,0,255,0.15);
+  }
+
+  .neon-text{ text-shadow:0 0 10px rgba(0,243,255,0.7), 0 0 22px rgba(112,0,255,0.4); }
+
+  .chamfer{ clip-path: polygon(7% 0, 100% 0, 100% 78%, 93% 100%, 0 100%, 0 22%); }
+  .chamfer-btn{ clip-path: polygon(10% 0, 100% 0, 90% 100%, 0 100%); }
+
+  @keyframes overdrive-pulse{
+    0%,100%{ box-shadow:0 0 15px rgba(0,243,255,0.4), 0 0 30px rgba(112,0,255,0.2); }
+    50%{ box-shadow:0 0 32px rgba(0,243,255,0.85), 0 0 55px rgba(112,0,255,0.55); }
+  }
+  .overdrive-glow{ animation:overdrive-pulse 1.6s infinite ease-in-out; }
+
+  /* ---------- Screens ---------- */
+  .screen{
+    position:absolute; inset:0; display:none; flex-direction:column;
+    opacity:0; transition:opacity .28s ease;
+  }
+  .screen.active{ display:flex; opacity:1; }
+
+  /* ---------- Panels / overlays ---------- */
+  .overlay-backdrop{
+    position:absolute; inset:0; background:rgba(0,0,0,0.72);
+    backdrop-filter:blur(2px); opacity:0; pointer-events:none; transition:opacity .25s ease;
+    z-index:70;
+  }
+  .overlay-backdrop.open{ opacity:1; pointer-events:auto; }
+
+  .sheet{ will-change: transform;
+    position:absolute; left:0; right:0; bottom:0; max-height:82%;
+    background:rgba(6,8,9,0.97); border-top:1px solid rgba(0,243,255,0.35);
+    border-radius:22px 22px 0 0; transform:translateY(100%);
+    transition:transform .32s cubic-bezier(.2,.8,.2,1);
+    z-index:75; display:flex; flex-direction:column; overflow:hidden;
+    box-shadow:0 -10px 40px rgba(0,243,255,0.15);
+  }
+  .sheet.open{ transform:translateY(0); }
+
+  .drawer-left{
+    position:absolute; top:0; left:0; height:100%; width:78%; max-width:300px;
+    background:rgba(0,0,0,0.96); border-right:1px solid rgba(0,243,255,0.3);
+    transform:translateX(-100%); transition:transform .32s cubic-bezier(.2,.8,.2,1);
+    z-index:80; overflow-y:auto;
+  }
+  .drawer-left.open{ transform:translateX(0); }
+
+  .modal-center{
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    z-index:90; opacity:0; pointer-events:none; transition:opacity .25s ease;
+  }
+  .modal-center.open{ opacity:1; pointer-events:auto; }
+  .modal-card{ will-change: transform;
+    transform:scale(0.9); transition:transform .3s cubic-bezier(.2,.8,.2,1);
+  }
+  .modal-center.open .modal-card{ will-change: transform; transform:scale(1); }
+
+  ::-webkit-scrollbar{ width:5px; }
+  ::-webkit-scrollbar-thumb{ background:rgba(0,243,255,0.35); border-radius:4px; }
+
+  /* ---------- Bottom dock ---------- */
+  .dock-btn{ transition: transform .2s ease, opacity .2s ease, filter .2s ease, color .2s ease, box-shadow .2s ease; }
+  .dock-btn.is-active{ color:#00f3ff; transform:scale(1.08); filter:drop-shadow(0 0 8px #00f3ff); }
+
+  /* ---------- 3D Perspective Regulation Beer Pong Table ---------- */
+  #table-perspective { perspective: 1100px; -webkit-perspective: 1100px; perspective-origin: 50% 15%; }
+  #table-surface {
+    position: relative;
+    margin: 0 auto;
+    overflow: visible;
+    
+    transform: rotateX(56deg) translateY(3%) translateZ(-40px);
+    transform-origin: center bottom;
+    transform-style: preserve-3d;
+    transition: none;
+  }
+  .table-plate{
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.08) 0%, transparent 12%),
+      radial-gradient(ellipse at 50% -10%, rgba(0,243,255,0.22), transparent 55%),
+      radial-gradient(ellipse at 50% 110%, rgba(255,46,196,0.18), transparent 55%),
+      linear-gradient(180deg, #050609 0%, #0c0e14 50%, #030406 100%);
+    border: 3px solid rgba(0, 243, 255, 0.85);
+    box-shadow: 
+      inset 0 0 50px rgba(0, 243, 255, 0.25), 
+      inset 0 0 120px rgba(0, 0, 0, 0.95), 
+      0 0 35px rgba(0, 243, 255, 0.5),
+      0 0 80px rgba(0, 243, 255, 0.25);
+  }
+  .tactical-grid{
+    background-image:
+      linear-gradient(rgba(0,243,255,0.12) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,243,255,0.12) 1px, transparent 1px);
+    background-size:24px 24px;
+    -webkit-mask-image:radial-gradient(ellipse at center, black 60%, transparent 100%);
+    mask-image:radial-gradient(ellipse at center, black 60%, transparent 100%);
+    opacity:0.55;
+  }
+  .table-sheen{
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.04) 15%, transparent 40%, rgba(0,0,0,0.85) 100%),
+      radial-gradient(ellipse at 50% -15%, rgba(0,243,255,0.2), transparent 65%);
+    mix-blend-mode: screen;
+    overflow: hidden;
+  }
+  .table-sheen::after {
+    content:""; position:absolute; top:0; left:-100%; width:150%; height:100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+    animation: sheen-sweep 4.5s infinite cubic-bezier(0.4, 0.0, 0.2, 1);
+    transform: skewX(-30deg);
+  }
+  @keyframes sheen-sweep {
+    0% { transform: translateX(-50%) skewX(-20deg); }
+    100% { transform: translateX(100%) skewX(-20deg); }
+  }
+  .table-vignette{ box-shadow:inset 0 0 120px rgba(0,0,0,0.95); }
+  .table-rail{ position:absolute; top:0; bottom:0; width:6px; z-index:2; }
+  .table-rail-left{ left:0; background:linear-gradient(180deg, var(--c-ai), var(--c-player)); box-shadow:0 0 16px var(--c-player), 0 0 24px var(--c-ai); }
+  .table-rail-right{ right:0; background:linear-gradient(180deg, var(--c-ai), var(--c-player)); box-shadow:0 0 16px var(--c-player), 0 0 24px var(--c-ai); }
+  .rail-energy{ position:absolute; top:0; bottom:0; width:2px; z-index:3; background:linear-gradient(180deg, transparent, rgba(255,255,255,0.95), transparent); background-size:100% 220%; opacity:0.85; animation:energy-flow-v 2.6s linear infinite; }
+  .rail-energy-left{ left:0; }
+  .rail-energy-right{ right:0; animation-delay:1.3s; }
+  @keyframes energy-flow-v{ 0%{ background-position:0 220%; } 100%{ background-position:0 -220%; } }
+
+  .table-hologram{ font-size:140px; color:var(--c-player); opacity:0.08; animation:holo-pulse 4s ease-in-out infinite; }
+  @keyframes holo-pulse{ 0%,100%{ opacity:0.06; transform:scale(1); } 50%{ opacity:0.14; transform:scale(1.05); } }
+  .hologram-ring{ position:absolute; top:50%; left:50%; width:170px; height:170px; margin:-85px 0 0 -85px; border-radius:9999px; border:1px dashed rgba(0,243,255,0.3); animation:table-spin 14s linear infinite; }
+  @keyframes table-spin{ to{ transform:rotate(360deg); } }
+
+  .throw-lane{
+    position:absolute; left:50%; top:0; bottom:0; width:18%; transform:translateX(-50%);
+    border-left:1px dashed rgba(0,243,255,0.22);
+    border-right:1px dashed rgba(0,243,255,0.22);
+    background:
+      linear-gradient(180deg, rgba(0,243,255,0.06) 0%, transparent 12%, transparent 88%, rgba(0,243,255,0.06) 100%),
+      repeating-linear-gradient(180deg, transparent, transparent 8%, rgba(0,243,255,0.12) 8%, rgba(0,243,255,0.12) 8.4%);
+    box-shadow: inset 0 0 25px rgba(0, 243, 255, 0.08);
+    z-index:10; pointer-events:none;
+  }
+  .throw-lane-beam{ display: none; }
+  @keyframes beam-move{ 0%{ background-position-y:0; } 100%{ background-position-y:26px; } }
+  .throw-reticle{
+    position:absolute; top:50%; left:50%; width:64px; height:64px; margin:-32px 0 0 -32px;
+    border:2px dashed rgba(0,243,255,0.6); border-radius:9999px;
+    display:flex; align-items:center; justify-content:center; animation:table-spin 8s linear infinite;
+  }
+  .throw-reticle-dot{ width:8px; height:8px; border-radius:9999px; background:#fff; box-shadow:0 0 10px #00f3ff, 0 0 20px #00f3ff; }
+
+  /* ---------- Tournament Cup Racks & Cups ---------- */
+  .rack-target {
+    position: absolute; left: 50%; transform: translateX(-50%);
+    width: 88%; aspect-ratio: 1.15 / 1;
+    border: 1.5px dashed rgba(0, 243, 255, 0.25);
+    clip-path: polygon(0% 0%, 100% 0%, 50% 100%);
+    pointer-events: none; z-index: 12;
+    background: rgba(0, 243, 255, 0.02);
+  }
+  .rack-target-ai { top: 2.2%; transform: translateX(-50%) rotate(180deg); border-color: rgba(189, 147, 249, 0.3); }
+  .rack-target-player { bottom: 2.2%; border-color: rgba(0, 243, 255, 0.3); }
+
+  .cup-formation{ position:absolute; left:50%; transform:translateX(-50%); display:flex; flex-direction:column; align-items:center; width:88%; z-index:15; }
+  .cup-formation-ai{ top:2.8%; }
+  .cup-formation-player{ bottom:2.8%; }
+  .cup-row{ display:flex; justify-content:center; width:100%; gap: 1.2%; margin-top: -3.8%; }
+  .cup-row:first-child{ margin-top: 0; }
+  .cup{ width: 23.2%; aspect-ratio: 1 / 1; border-radius:9999px; position:relative; border-width:3px; border-style:solid; display:flex; align-items:center; justify-content:center; transition:transform .35s cubic-bezier(.3,-0.2,.6,1), opacity .35s ease, filter .35s ease, box-shadow .35s ease; box-sizing: border-box; filter: drop-shadow(0 8px 12px rgba(0,0,0,0.65)); }
+  .cup-player{ border-color:var(--c-player); color:var(--c-player); background:radial-gradient(circle at 35% 28%, rgba(0,243,255,0.38), rgba(0,243,255,0.12) 70%); box-shadow:0 0 20px rgba(0,243,255,0.55), inset 0 0 14px rgba(0,243,255,0.4); }
+  .cup-ai{ border-color:var(--c-ai); color:var(--c-ai); background:radial-gradient(circle at 35% 28%, rgba(189,147,249,0.38), rgba(112,0,255,0.14) 70%); box-shadow:0 0 20px rgba(112,0,255,0.55), inset 0 0 14px rgba(112,0,255,0.4); }
+  .cup-inner{ width:58%; height:58%; border-radius:9999px; border:1px solid currentColor; opacity:0.6; box-shadow:inset 0 0 10px currentColor; }
+  .cup.hit{ transform:scale(1.2) translateY(-20px) rotate(15deg); opacity:0; filter:brightness(4) saturate(2); pointer-events:none; box-shadow: 0 0 50px currentColor; }
+  .cup { transition: transform 0.5s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.5s ease, filter 0.5s ease, box-shadow 0.5s cubic-bezier(0.2, 0.8, 0.2, 1); }
+  @keyframes cup-idle{ 0%,100%{ transform:translateY(0); } 50%{ transform:translateY(-3px); } }
+  .cup:not(.hit){ animation:cup-idle 3.2s ease-in-out infinite; }
+  /* reticle corner decorations, drawn with layered gradients so no extra markup is needed */
+  .cup::before, .cup::after{ content:""; position:absolute; inset:-7px; pointer-events:none; opacity:0.85; }
+  .cup::before{
+    background:
+      linear-gradient(currentColor,currentColor) top left / 12px 2px no-repeat,
+      linear-gradient(currentColor,currentColor) top left / 2px 12px no-repeat,
+      linear-gradient(currentColor,currentColor) bottom right / 12px 2px no-repeat,
+      linear-gradient(currentColor,currentColor) bottom right / 2px 12px no-repeat;
+  }
+  .cup::after{
+    background:
+      linear-gradient(currentColor,currentColor) top right / 12px 2px no-repeat,
+      linear-gradient(currentColor,currentColor) top right / 2px 12px no-repeat,
+      linear-gradient(currentColor,currentColor) bottom left / 12px 2px no-repeat,
+      linear-gradient(currentColor,currentColor) bottom left / 2px 12px no-repeat;
+  }
+
+  /* ---------- Ball ---------- */
+  #ball{
+    position:fixed; left:0; top:0; width:26px; height:26px; border-radius:9999px;
+    background:radial-gradient(circle at 32% 28%, #ffffff, var(--ball-color) 55%, rgba(0,0,0,0.4) 100%);
+    box-shadow:0 0 16px var(--ball-color), 0 0 32px var(--ball-color), inset -2px -2px 6px rgba(0,0,0,0.5);
+    z-index:45; pointer-events:none; will-change: transform;
+  }
+  #ball-shadow {
+    position:fixed; left:0; top:0; width:22px; height:7px; border-radius:9999px;
+    background:radial-gradient(ellipse, rgba(0,0,0,0.8), rgba(0,0,0,0) 70%);
+    filter:blur(1px); z-index:44; pointer-events:none; will-change: transform, opacity;
+  }
+  
+
+  /* ---------- Skill-Based Aiming System ---------- */
+  .aim-layer{ position:absolute; inset:0; z-index:25; touch-action:none; cursor:crosshair; }
+  #aim-canvas{ position:fixed; inset:0; width:100vw; height:100vh; z-index:40; pointer-events:none; }
+  .cup-target{ filter:brightness(1.9) saturate(1.3); }
+  .cup-target .cup-inner{ opacity:0.95; }
+  .cup-target::before, .cup-target::after{ opacity:1; animation:target-pulse 0.6s ease-in-out infinite; }
+  @keyframes target-pulse{ 0%,100%{ opacity:0.6; } 50%{ opacity:1; } }
+  .trick-armed{ outline:2px solid #ffd23f; box-shadow:0 0 8px #ffd23f, 0 0 20px #ffd23f; opacity:1 !important; }
+  .aim-hint{ position:absolute; left:50%; bottom:96px; transform:translateX(-50%); z-index:26; pointer-events:none; font-family:'Rajdhani',sans-serif; font-size:11px; letter-spacing:0.14em; text-transform:uppercase; color:rgba(0,243,255,0.55); text-shadow:0 0 8px rgba(0,243,255,0.4); transition:opacity .25s ease; }
+
+  /* ---------- Power meter ---------- */
+  .power-track{
+    width:16px; height:180px; background:#000; border:2px solid rgba(0,243,255,0.35);
+    border-radius:9999px; padding:3px; display:flex; flex-direction:column; justify-content:flex-end;
+    overflow:hidden; box-shadow:0 0 20px rgba(0,0,0,0.9);
+  }
+  .power-fill{
+    width:100%; border-radius:9999px;
+    background:linear-gradient(to top, #7000ff, #00f3ff, #ffffff);
+    transition:height .08s linear;
+  }
+
+  /* ---------- Trick meter segments ---------- */
+  .segmented{ display:flex; flex-direction:column-reverse; gap:3px; height:110px; width:8px; }
+  .segmented div{ flex:1; background:rgba(0,243,255,0.15); border-radius:2px; transition:background .2s ease, box-shadow .2s ease; }
+  .segmented div.lit{ background:#00f3ff; box-shadow:0 0 8px #00f3ff; }
+
+  .hud-btn{
+    background:linear-gradient(135deg,#171b1c 0%,#000 100%);
+    border:1px solid rgba(0,243,255,0.3); position:relative; overflow:hidden;
+  }
+  .hud-btn:active{ transform:scale(0.93); }
+
+  @keyframes pulse-btn{
+    0%,100%{ transform:scale(1); opacity:1; }
+    50%{ transform:scale(1.05); opacity:0.85; }
+  }
+  .trick-ready{ animation:pulse-btn 1.1s infinite ease-in-out; box-shadow:0 0 25px rgba(0,243,255,0.8); }
+
+  /* ---------- Toast ---------- */
+  #toast-stack{ position:absolute; top:76px; left:0; right:0; z-index:95; display:flex; flex-direction:column; align-items:center; gap:6px; pointer-events:none; }
+  .toast{ will-change: transform, opacity;
+    font-family:'Space Grotesk',monospace; font-size:11px; letter-spacing:0.08em;
+    padding:8px 16px; border-radius:9999px; background:rgba(0,0,0,0.85);
+    border:1px solid rgba(0,243,255,0.4); color:#00f3ff; text-transform:uppercase;
+    opacity:0; transform:translateY(-8px); transition: transform .3s ease, opacity .3s ease, filter .3s ease, color .3s ease, box-shadow .3s ease; box-shadow:0 0 14px rgba(0,243,255,0.3);
+  }
+  .toast.show{ opacity:1; transform:translateY(0); }
+
+  /* ---------- Misc ---------- */
+  .status-blink{ animation:blink 1s steps(2) infinite; }
+  @keyframes blink{ 0%,100%{ opacity:1; } 50%{ opacity:0.25; } }
+
+  input[type="range"]{ -webkit-appearance:none; appearance:none; height:4px; border-radius:9999px; background:rgba(0,243,255,0.2); }
+  input[type="range"]::-webkit-slider-thumb{
+    -webkit-appearance:none; appearance:none; width:16px; height:16px; border-radius:9999px;
+    background:#00f3ff; box-shadow:0 0 10px #00f3ff; cursor:pointer; border:2px solid #000;
+  }
+
+  .seg-option{ transition: transform .2s ease, opacity .2s ease, filter .2s ease, color .2s ease, box-shadow .2s ease; }
+  .seg-option.active{ background:rgba(0,243,255,0.18); color:#00f3ff; box-shadow:inset 0 0 0 1px #00f3ff; }
+
+  .skin-swatch.selected{ box-shadow:0 0 0 2px #00f3ff, 0 0 16px rgba(0,243,255,0.6); }
+  .skin-swatch.locked{ opacity:0.4; filter:grayscale(1); }
+
+  /* ---------- Arena: Deep Space (skin toggle, no physics/markup changes) ---------- */
+  /* Purely a re-skin: redeclares --c-player/--c-ai (already consumed by
+     .table-rail/.table-hologram) and overrides the few hardcoded-rgba rules
+     (.cup-player/.cup-ai backgrounds, .table-plate) so the physics engine,
+     which only ever reads element geometry via getBoundingClientRect, is
+     completely unaffected — it has no idea which arena skin is active. */
+  #app.theme-space{ --c-player:#00dce6; --c-ai:#bd93f9; }
+  .theme-space .cup-player{
+    border-color:#00dce6; color:#00dce6;
+    background:radial-gradient(circle at 35% 28%, rgba(0,220,230,0.34), rgba(0,220,230,0.09) 70%);
+    box-shadow:0 0 18px rgba(0,220,230,0.55), inset 0 0 12px rgba(0,220,230,0.35);
+  }
+  .theme-space .cup-ai{
+    border-color:#bd93f9; color:#bd93f9;
+    background:radial-gradient(circle at 35% 28%, rgba(189,147,249,0.34), rgba(112,0,255,0.12) 70%);
+    box-shadow:0 0 18px rgba(112,0,255,0.55), inset 0 0 12px rgba(112,0,255,0.35);
+  }
+  .theme-space .table-plate{
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.02) 0%, transparent 15%),
+      linear-gradient(180deg, rgba(0,243,255,0.05) 0%, transparent 30%),
+      radial-gradient(ellipse at 50% 15%, rgba(112,0,255,0.15), transparent 60%),
+      radial-gradient(ellipse at 50% 85%, rgba(0,243,255,0.15), transparent 60%),
+      linear-gradient(180deg, #090a0d 0%, #0d0f14 55%, #050608 100%);
+    border: 2px solid rgba(0, 243, 255, 0.8);
+    box-shadow: 
+      inset 0 0 40px rgba(0, 243, 255, 0.2), 
+      inset 0 0 100px rgba(0, 0, 0, 0.8), 
+      0 0 20px rgba(0, 243, 255, 0.4),
+      0 0 50px rgba(0, 243, 255, 0.2);
+  }
+  .theme-space .tactical-grid{ opacity:0.3; }
+  .theme-space .throw-reticle{ border-color:rgba(0,220,230,0.55); }
+  .theme-space .hologram-ring{ border-color:rgba(0,220,230,0.25); }
+  .arena-swatch.selected{ box-shadow:0 0 0 2px #00f3ff, 0 0 16px rgba(0,243,255,0.6); }
+
+  /* ---------- STAGE 1: Precision crosshair ---------- */
+  .aim-crosshair{
+    position:fixed; left:0; top:0; width:64px; height:64px; margin:-32px 0 0 -32px;
+    z-index:42; pointer-events:none; opacity:0; transition:opacity .15s ease;
+    will-change: transform, opacity;
+  }
+  .aim-crosshair.show{ opacity:1; }
+  .aim-crosshair.locked .crosshair-ring{ border-color:#39ff8c; box-shadow:0 0 14px rgba(57,255,140,0.7); }
+  .aim-crosshair.locked .crosshair-dot{ background:#39ff8c; box-shadow:0 0 10px #39ff8c; }
+  .crosshair-ring{
+    position:absolute; inset:6px; border-radius:9999px; border:2px solid #ff2ec4;
+    box-shadow:0 0 14px rgba(255,46,196,0.7); animation:crosshair-spin 3s linear infinite;
+  }
+  @keyframes crosshair-spin{ to{ transform:rotate(360deg); } }
+  .crosshair-dot{ position:absolute; left:50%; top:50%; width:6px; height:6px; margin:-3px 0 0 -3px; border-radius:9999px; background:#ff2ec4; box-shadow:0 0 10px #ff2ec4; }
+  .crosshair-tick{ position:absolute; background:currentColor; color:#ff2ec4; opacity:0.9; }
+  .tick-n{ left:50%; top:-4px; width:2px; height:12px; margin-left:-1px; background:#ff2ec4; }
+  .tick-s{ left:50%; bottom:-4px; width:2px; height:12px; margin-left:-1px; background:#ff2ec4; }
+  .tick-e{ top:50%; right:-4px; width:12px; height:2px; margin-top:-1px; background:#ff2ec4; }
+  .tick-w{ top:50%; left:-4px; width:12px; height:2px; margin-top:-1px; background:#ff2ec4; }
+  .aim-crosshair.locked .tick-n, .aim-crosshair.locked .tick-s, .aim-crosshair.locked .tick-e, .aim-crosshair.locked .tick-w{ background:#39ff8c; }
+
+  /* ---------- STAGE 2: Live shot-quality readout ---------- */
+  .aim-stats-hud{
+    position:absolute; left:50%; bottom:120px; transform:translateX(-50%) translateY(8px);
+    width:200px; z-index:31; display:flex; flex-direction:column; gap:6px;
+    padding:10px 12px; border-radius:10px; opacity:0; pointer-events:none;
+    background:rgba(6,8,10,0.72); backdrop-filter:blur(10px);
+    border:1px solid rgba(0,243,255,0.25); box-shadow:0 0 20px rgba(0,0,0,0.5);
+    transition:opacity .15s ease, transform .15s ease;
+  }
+  .aim-stats-hud.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+  .aim-stat-row{ display:flex; align-items:center; gap:8px; }
+  .aim-stat-label{ font-family:'Space Grotesk',monospace; font-size:9px; letter-spacing:0.12em; color:rgba(255,255,255,0.6); width:44px; flex-shrink:0; }
+  .aim-stat-track{ flex:1; height:5px; border-radius:9999px; background:rgba(255,255,255,0.08); overflow:hidden; position:relative; }
+  .aim-stat-fill{ position:absolute; top:0; bottom:0; left:0; width:0%; border-radius:9999px; transition:width .05s linear; }
+  .fill-cyan{ background:#00f3ff; box-shadow:0 0 8px #00f3ff; }
+  .fill-magenta{ background:#ff2ec4; box-shadow:0 0 8px #ff2ec4; left:50%; width:0%; }
+  .fill-green{ background:#39ff8c; box-shadow:0 0 8px #39ff8c; }
+  .spin-track{ position:relative; }
+  .spin-track::before{ content:""; position:absolute; left:50%; top:-2px; bottom:-2px; width:1px; background:rgba(255,255,255,0.35); }
+  .aim-release-readout{ text-align:center; font-family:'Orbitron',sans-serif; font-size:11px; letter-spacing:0.08em; color:#39ff8c; text-shadow:0 0 8px rgba(57,255,140,0.6); }
+
+  /* ---------- Deep Space theme: starfield + crystalline cup polish ---------- */
+  .theme-space .star-layer{ position:absolute; inset:0; pointer-events:none; z-index:0; }
+  .star-pt{ position:absolute; border-radius:9999px; background:#fff; animation:star-twinkle 3.4s ease-in-out infinite; }
+  @keyframes star-twinkle{ 0%,100%{ opacity:0.25; } 50%{ opacity:1; } }
+  .theme-space .cup-player, .theme-space .cup-ai{ backdrop-filter:blur(6px); }
+  .theme-space .cup-inner{ box-shadow:inset 0 0 10px currentColor, 0 0 6px currentColor; }
+</style>
+
+<script>
+window.addEventListener('load', function() {
+  const d = document.createElement('div');
+  d.id = 'debug-console';
+  d.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:30%; background:rgba(0,0,0,0.8); color:#0f0; font-family:monospace; font-size:10px; z-index:999999; overflow:auto; pointer-events:none;';
+  document.body.appendChild(d);
+  
+  function logMsg(msg, color) {
+    if(!document.getElementById('debug-console')) return;
+    const p = document.createElement('div');
+    p.style.color = color;
+    p.textContent = msg;
+    document.getElementById('debug-console').prepend(p);
+  }
+  
+  const oldLog = console.log;
+  console.log = function(...args) { logMsg(args.join(' '), '#0f0'); oldLog.apply(console, args); };
+  const oldErr = console.error;
+  console.error = function(...args) { logMsg(args.join(' '), '#f00'); oldErr.apply(console, args); };
+  const oldWarn = console.warn;
+  console.warn = function(...args) { logMsg(args.join(' '), '#ff0'); oldWarn.apply(console, args); };
+  
+  window.addEventListener('error', function(e) {
+    console.error('Global Error: ' + e.message + ' at ' + e.filename + ':' + e.lineno);
+  });
+});
+</script>
+</head>
+<body>
+<div id="app" class="carbon-texture">
+
+  <!-- ============================================================ -->
+  <!-- BOOT SCREEN -->
+  <!-- ============================================================ -->
+  <div id="screen-boot" class="screen active items-center justify-center">
+    <div class="particle-field" id="boot-particles"></div>
+    <div class="relative z-10 flex flex-col items-center justify-center gap-12 w-full pl-[max(1.5rem,env(safe-area-inset-left))] pr-[max(1.5rem,env(safe-area-inset-right))] text-center flex-1">
+      <div class="flex flex-col items-center gap-8 w-full">
+        <div class="relative flex items-center justify-center w-[120px] h-[120px] rounded-full bg-primary/5 border border-primary/30 shadow-[0_0_40px_rgba(0,243,255,0.25)] backdrop-blur-md">
+          <span class="material-symbols-outlined text-primary text-[72px] fill-icon neon-text drop-shadow-[0_0_15px_rgba(0,243,255,0.8)]">sports_esports</span>
+        </div>
+        <div class="flex flex-col items-center gap-3">
+          <h1 class="font-display text-[40px] leading-[1.1] italic-techno tracking-[0.15em] neon-text text-transparent bg-clip-text bg-gradient-to-r from-primary via-secondary-light to-primary">CYBER-PONG<br>ARENA</h1>
+          <p class="font-mono text-[15px] text-ink-dim tracking-[0.3em] uppercase">Neon Overdrive Protocol</p>
+        </div>
+      </div>
+      <div class="flex flex-col items-center gap-5 w-full mt-4">
+        <div class="w-[70%] h-2.5 bg-s3 rounded-full overflow-hidden border border-primary/30 shadow-[0_0_20px_rgba(0,243,255,0.15)]">
+          <div id="boot-bar" class="h-full bg-gradient-to-r from-secondary via-primary to-primary shadow-[0_0_10px_rgba(0,243,255,0.5)]" style="width:0%"></div>
+        </div>
+        <p id="boot-label" class="font-mono text-[14px] text-primary/80 tracking-[0.25em] uppercase">Initializing systems...</p>
+      </div>
+    </div>
+    <p class="absolute bottom-12 font-mono text-[13px] text-ink-dim/50 tracking-[0.35em] uppercase">tap to skip</p>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- MAIN MENU SCREEN -->
+  <!-- ============================================================ -->
+  <div id="screen-menu" class="screen">
+    <header class="fixed-header absolute top-0 left-0 w-full z-30 flex justify-between items-center pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] h-16 pt-[env(safe-area-inset-top)] bg-black/90 backdrop-blur-xl border-b border-primary/25">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-full border-2 border-primary shadow-glow-cyan flex items-center justify-center bg-s2">
+          <span class="material-symbols-outlined text-primary fill-icon text-lg">shield_person</span>
+        </div>
+        <h1 class="font-display text-lg italic-techno tracking-[0.1em] neon-text text-transparent bg-clip-text bg-gradient-to-r from-primary via-secondary-light to-primary">CYBER-PONG</h1>
+      </div>
+      <div class="flex items-center gap-2">
+        <button id="btn-open-log" class="w-9 h-9 flex items-center justify-center  hover:bg-primary/10 text-primary/80 border border-primary/20 transition-transform duration-300 ease-out active:scale-90">
+          <span class="material-symbols-outlined text-lg">receipt_long</span>
+        </button>
+        <button id="btn-open-drawer" class="w-9 h-9 flex items-center justify-center  hover:bg-primary/10 text-primary/80 border border-primary/20 transition-transform duration-300 ease-out active:scale-90">
+          <span class="material-symbols-outlined text-lg">settings</span>
+        </button>
+      </div>
+    </header>
+
+    <main class="relative w-full flex-1 flex flex-col items-center justify-center pt-16 pb-24 overflow-y-auto">
+      <div class="particle-field opacity-60"><div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[520px] h-[520px] bg-gradient-to-tr from-primary/10 via-secondary/15 to-transparent rounded-full blur-[120px]"></div></div>
+
+      <div class="relative z-10 w-full flex flex-col items-center px-5">
+        <div class="grid grid-cols-1 gap-4 w-full max-w-2xl mb-6 mt-2">
+          <button id="btn-quick-match" class="group relative overdrive-glow overflow-hidden bg-primary text-black font-display text-xl italic-techno py-6 chamfer transition-transform duration-300 ease-out hover:brightness-110 active:scale-95 border-r-4 border-secondary">
+            <span class="relative z-10">QUICK MATCH</span>
+            <div class="absolute inset-0 bg-white/25 -translate-x-full group-hover:translate-x-full transition-transform duration-700 skew-x-12"></div>
+          </button>
+          <button id="btn-tournament" class="group relative overflow-hidden bg-s2 border border-secondary text-secondary-light font-display text-lg italic-techno py-5 chamfer transition-transform duration-300 ease-out hover:bg-secondary/20 active:scale-95 shadow-glow-purple">
+            <span class="relative z-10 uppercase">Tournament</span>
+            <div class="absolute bottom-0 left-0 w-full h-1 bg-secondary shadow-[0_0_15px_#7000ff]"></div>
+          </button>
+          <button id="btn-ranked" class="group relative overflow-hidden bg-s2 border border-magenta/50 text-magenta font-display text-lg italic-techno py-5 chamfer transition-transform duration-300 ease-out hover:border-magenta hover:bg-magenta/15 active:scale-95">
+            <span class="relative z-10 uppercase">Ranked Arena</span>
+            <div class="absolute top-0 right-0 w-1 h-full bg-magenta shadow-[0_0_15px_#ff2e78]"></div>
+          </button>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3 w-full max-w-2xl">
+          <div class="glass-panel scan-line relative p-3 rounded-xl flex flex-col items-center border-l-4 border-primary">
+            <span class="font-mono text-[10px] text-primary/70 uppercase tracking-widest">Season Rank</span>
+            <span id="stat-rank" class="font-display text-primary text-base mt-1 italic-techno neon-text">ELITE IV</span>
+          </div>
+          <div class="glass-panel scan-line relative p-3 rounded-xl flex flex-col items-center border-l-4 border-secondary-light">
+            <span class="font-mono text-[10px] text-secondary-light/70 uppercase tracking-widest">Total Wins</span>
+            <span id="stat-wins" class="font-display text-secondary-light text-base mt-1 italic-techno">1,240</span>
+          </div>
+          <div class="glass-panel scan-line relative p-3 rounded-xl flex flex-col items-center border-l-4 border-white">
+            <span class="font-mono text-[10px] text-ink-dim uppercase tracking-widest">Win Rate</span>
+            <span id="stat-winrate" class="font-display text-ink text-base mt-1 italic-techno">68.4%</span>
+          </div>
+          <div class="glass-panel scan-line relative p-3 rounded-xl flex flex-col items-center border-l-4 border-magenta">
+            <span class="font-mono text-[10px] text-magenta/70 uppercase tracking-widest">Streak</span>
+            <span id="stat-streak" class="font-display text-magenta text-base mt-1 italic-techno">7W</span>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <nav class="absolute bottom-[calc(1rem+env(safe-area-inset-bottom))] left-1/2 -translate-x-1/2 w-[92%] max-w-2xl z-30">
+      <div class="glass-panel flex justify-around items-center h-[68px] px-2 rounded-2xl">
+        <button data-dock="arena" class="dock-btn is-active flex flex-col items-center justify-center text-white/50 flex-1 py-2">
+          <span class="material-symbols-outlined text-2xl fill-icon">sports_esports</span>
+          <span class="font-mono text-[9px] mt-0.5 tracking-wide">ARENA</span>
+        </button>
+        <button data-dock="tournament" class="dock-btn flex flex-col items-center justify-center text-white/50 flex-1 py-2">
+          <span class="material-symbols-outlined text-xl">emoji_events</span>
+          <span class="font-mono text-[9px] mt-0.5 tracking-wide">TOURNEY</span>
+        </button>
+        <button data-dock="lobby" class="dock-btn flex flex-col items-center justify-center text-white/50 flex-1 py-2">
+          <span class="material-symbols-outlined text-xl">groups</span>
+          <span class="font-mono text-[9px] mt-0.5 tracking-wide">LOBBY</span>
+        </button>
+        <button data-dock="loadout" class="dock-btn flex flex-col items-center justify-center text-white/50 flex-1 py-2">
+          <span class="material-symbols-outlined text-xl">style</span>
+          <span class="font-mono text-[9px] mt-0.5 tracking-wide">GEAR</span>
+        </button>
+        <button data-dock="profile" class="dock-btn flex flex-col items-center justify-center text-white/50 flex-1 py-2">
+          <span class="material-symbols-outlined text-xl">person</span>
+          <span class="font-mono text-[9px] mt-0.5 tracking-wide">PROFILE</span>
+        </button>
+      </div>
+    </nav>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- NAV DRAWER (from menu header settings icon) -->
+  <!-- ============================================================ -->
+  <div id="drawer-backdrop" class="overlay-backdrop"></div>
+  <aside id="nav-drawer" class="drawer-left pt-16 flex flex-col">
+    <div class="px-5 mb-8 flex flex-col">
+      <span class="font-display text-lg text-primary italic-techno mb-2">PILOT_ID</span>
+      <div class="flex items-center gap-3">
+        <div class="w-11 h-11 bg-primary/10  flex items-center justify-center border border-primary/40 shadow-glow-cyan">
+          <span class="material-symbols-outlined text-primary">person</span>
+        </div>
+        <div>
+          <p id="drawer-name" class="font-mono text-ink tracking-tight text-sm">COMMANDER_01</p>
+          <p id="drawer-rank" class="font-mono text-[10px] text-primary/70">LVL 99 | RANK #42</p>
+        </div>
+      </div>
+    </div>
+    <nav class="flex flex-col gap-1 px-2">
+      <button data-nav-target="none" class="nav-link flex items-center gap-4 pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] py-3 text-primary font-bold bg-gradient-to-r from-primary/10 to-transparent border-l-4 border-primary rounded">
+        <span class="material-symbols-outlined">layers</span><span class="italic-techno text-sm">Tactical Overlay</span>
+      </button>
+      <button data-nav-target="panel-settings" class="nav-link flex items-center gap-4 pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] py-3 text-ink-dim hover:text-primary hover:bg-primary/5 transition-transform duration-300 ease-out rounded">
+        <span class="material-symbols-outlined">settings_brightness</span><span class="italic-techno text-sm">Hologram Settings</span>
+      </button>
+      <button data-nav-target="panel-log" class="nav-link flex items-center gap-4 pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] py-3 text-ink-dim hover:text-primary hover:bg-primary/5 transition-transform duration-300 ease-out rounded">
+        <span class="material-symbols-outlined">receipt_long</span><span class="italic-techno text-sm">Arena Log</span>
+      </button>
+      <button data-nav-target="panel-system" class="nav-link flex items-center gap-4 pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] py-3 text-ink-dim hover:text-primary hover:bg-primary/5 transition-transform duration-300 ease-out rounded">
+        <span class="material-symbols-outlined">memory</span><span class="italic-techno text-sm">System Status</span>
+      </button>
+    </nav>
+  </aside>
+
+  <!-- ============================================================ -->
+  <!-- SHEET PANELS (shared overlay system) -->
+  <!-- ============================================================ -->
+  <div id="panel-backdrop" class="overlay-backdrop"></div>
+
+  <!-- SETTINGS -->
+  <section id="panel-settings" class="sheet">
+    <div class="flex items-center justify-between px-5 py-4 border-b border-primary/20">
+      <h2 class="font-display text-primary text-base italic-techno tracking-wide">HOLOGRAM SETTINGS</h2>
+      <button class="btn-close-panel w-8 h-8 flex items-center justify-center text-ink-dim hover:text-primary"><span class="material-symbols-outlined">close</span></button>
+    </div>
+    <div class="p-5 flex flex-col gap-6 overflow-y-auto">
+      <div class="flex items-center justify-between">
+        <div>
+          <p class="font-mono text-sm text-ink">Sound FX</p>
+          <p class="font-mono text-[10px] text-ink-dim">Tactical audio feedback</p>
+        </div>
+        <button id="toggle-sound" class="toggle-switch w-12 h-7 rounded-full bg-primary relative transition-transform duration-300 ease-out">
+          <span class="knob absolute top-0.5 left-0.5 w-6 h-6 bg-black rounded-full transition-transform duration-300 ease-out"></span>
+        </button>
+      </div>
+      <div class="flex items-center justify-between">
+        <div>
+          <p class="font-mono text-sm text-ink">Haptics</p>
+          <p class="font-mono text-[10px] text-ink-dim">Vibration on impact</p>
+        </div>
+        <button id="toggle-haptics" class="toggle-switch w-12 h-7 rounded-full bg-primary relative transition-transform duration-300 ease-out">
+          <span class="knob absolute top-0.5 left-0.5 w-6 h-6 bg-black rounded-full transition-transform duration-300 ease-out"></span>
+        </button>
+      </div>
+      <div>
+        <p class="font-mono text-sm text-ink mb-2">AI Difficulty</p>
+        <div id="difficulty-seg" class="grid grid-cols-3 gap-2 font-mono text-xs uppercase">
+          <button data-diff="easy" class="seg-option py-2 rounded border border-primary/25 text-ink-dim">Easy</button>
+          <button data-diff="normal" class="seg-option py-2 rounded border border-primary/25 text-ink-dim active">Normal</button>
+          <button data-diff="hard" class="seg-option py-2 rounded border border-primary/25 text-ink-dim">Hard</button>
+        </div>
+      </div>
+      <div>
+        <div class="flex justify-between mb-2">
+          <p class="font-mono text-sm text-ink">Throw Sensitivity</p>
+          <span id="sensitivity-value" class="font-mono text-sm text-primary">70</span>
+        </div>
+        <input id="sensitivity-slider" type="range" min="0" max="100" value="70" class="w-full"/>
+      </div>
+      <button id="btn-reset-stats" class="mt-2 py-3 rounded border border-magenta/40 text-magenta font-mono text-xs uppercase tracking-widest hover:bg-magenta/10 transition-transform duration-300 ease-out">Reset Pilot Stats</button>
+    </div>
+  </section>
+
+  <!-- ARENA LOG -->
+  <section id="panel-log" class="sheet">
+    <div class="flex items-center justify-between px-5 py-4 border-b border-primary/20">
+      <h2 class="font-display text-primary text-base italic-techno tracking-wide">ARENA LOG</h2>
+      <button class="btn-close-panel w-8 h-8 flex items-center justify-center text-ink-dim hover:text-primary"><span class="material-symbols-outlined">close</span></button>
+    </div>
+    <div id="log-list" class="p-5 flex flex-col gap-2 overflow-y-auto"></div>
+  </section>
+
+  <!-- SYSTEM STATUS -->
+  <section id="panel-system" class="sheet">
+    <div class="flex items-center justify-between px-5 py-4 border-b border-primary/20">
+      <h2 class="font-display text-primary text-base italic-techno tracking-wide">SYSTEM STATUS</h2>
+      <button class="btn-close-panel w-8 h-8 flex items-center justify-center text-ink-dim hover:text-primary"><span class="material-symbols-outlined">close</span></button>
+    </div>
+    <div class="p-5 flex flex-col gap-3 overflow-y-auto font-mono text-xs">
+      <div class="flex justify-between border-b border-primary/10 pb-2"><span class="text-ink-dim">NETWORK PING</span><span id="sys-ping" class="text-primary">14ms</span></div>
+      <div class="flex justify-between border-b border-primary/10 pb-2"><span class="text-ink-dim">FRAME RATE</span><span id="sys-fps" class="text-primary">60fps</span></div>
+      <div class="flex justify-between border-b border-primary/10 pb-2"><span class="text-ink-dim">SERVER NODE</span><span id="sys-node" class="text-primary">NEO-TOKYO-3</span></div>
+      <div class="flex justify-between border-b border-primary/10 pb-2"><span class="text-ink-dim">BUILD VERSION</span><span class="text-primary">2.7.1-overdrive</span></div>
+      <div class="flex justify-between border-b border-primary/10 pb-2"><span class="text-ink-dim">DEVICE SYNC</span><span id="sys-sync" class="text-primary">98%</span></div>
+      <button id="btn-run-diagnostics" class="mt-3 py-3 rounded chamfer-btn bg-primary/10 border border-primary/40 text-primary uppercase tracking-widest hover:bg-primary/20 transition-transform duration-300 ease-out">Run Diagnostics</button>
+    </div>
+  </section>
+
+  <!-- TOURNAMENT -->
+  <section id="panel-tournament" class="sheet">
+    <div class="flex items-center justify-between px-5 py-4 border-b border-primary/20">
+      <h2 class="font-display text-secondary-light text-base italic-techno tracking-wide">TOURNAMENT BRACKET</h2>
+      <button class="btn-close-panel w-8 h-8 flex items-center justify-center text-ink-dim hover:text-primary"><span class="material-symbols-outlined">close</span></button>
+    </div>
+    <div class="p-5 flex flex-col gap-3 overflow-y-auto">
+      <p class="font-mono text-[11px] text-ink-dim">QUARTERFINAL &mdash; NEON CUP S4</p>
+      <div id="bracket-list" class="flex flex-col gap-2"></div>
+      <button id="btn-enter-bracket" class="mt-3 py-4 chamfer bg-secondary text-white font-display italic-techno tracking-wide active:scale-95 transition-transform duration-300 ease-out shadow-glow-purple">ENTER BRACKET</button>
+    </div>
+  </section>
+
+  <!-- LOBBY -->
+  <section id="panel-lobby" class="sheet">
+    <div class="flex items-center justify-between px-5 py-4 border-b border-primary/20">
+      <h2 class="font-display text-primary text-base italic-techno tracking-wide">MATCHMAKING LOBBY</h2>
+      <button class="btn-close-panel w-8 h-8 flex items-center justify-center text-ink-dim hover:text-primary"><span class="material-symbols-outlined">close</span></button>
+    </div>
+    <div id="lobby-list" class="p-5 flex flex-col gap-3 overflow-y-auto"></div>
+  </section>
+
+  <!-- LOADOUT / GEAR -->
+  <section id="panel-loadout" class="sheet">
+    <div class="flex items-center justify-between px-5 py-4 border-b border-primary/20">
+      <h2 class="font-display text-primary text-base italic-techno tracking-wide">LOADOUT / GEAR</h2>
+      <button class="btn-close-panel w-8 h-8 flex items-center justify-center text-ink-dim hover:text-primary"><span class="material-symbols-outlined">close</span></button>
+    </div>
+    <div class="p-5">
+      <p class="font-mono text-[11px] text-ink-dim mb-3 uppercase tracking-widest">Ball Skin</p>
+      <div id="skin-grid" class="grid grid-cols-4 gap-3"></div>
+    </div>
+    <div class="p-5 pt-0">
+      <p class="font-mono text-[11px] text-ink-dim mb-3 uppercase tracking-widest">Arena / Table</p>
+      <div id="arena-grid" class="grid grid-cols-2 gap-3"></div>
+    </div>
+  </section>
+
+  <!-- PROFILE -->
+  <section id="panel-profile" class="sheet">
+    <div class="flex items-center justify-between px-5 py-4 border-b border-primary/20">
+      <h2 class="font-display text-primary text-base italic-techno tracking-wide">PILOT PROFILE</h2>
+      <button class="btn-close-panel w-8 h-8 flex items-center justify-center text-ink-dim hover:text-primary"><span class="material-symbols-outlined">close</span></button>
+    </div>
+    <div class="p-5 flex flex-col gap-5 overflow-y-auto">
+      <div class="flex items-center gap-4">
+        <div class="w-16 h-16 rounded-xl bg-primary/10 border-2 border-primary flex items-center justify-center shadow-glow-cyan">
+          <span class="material-symbols-outlined text-primary text-3xl fill-icon">shield_person</span>
+        </div>
+        <div>
+          <p id="profile-name" class="font-display text-ink text-lg italic-techno">COMMANDER_01</p>
+          <p id="profile-rank" class="font-mono text-xs text-primary">LVL 99 | ELITE IV</p>
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div class="glass-panel p-3  flex flex-col items-center"><span class="font-mono text-[10px] text-ink-dim">WINS</span><span id="profile-wins" class="font-display text-primary text-lg">1,240</span></div>
+        <div class="glass-panel p-3  flex flex-col items-center"><span class="font-mono text-[10px] text-ink-dim">LOSSES</span><span id="profile-losses" class="font-display text-magenta text-lg">572</span></div>
+        <div class="glass-panel p-3  flex flex-col items-center"><span class="font-mono text-[10px] text-ink-dim">WIN RATE</span><span id="profile-winrate" class="font-display text-ink text-lg">68.4%</span></div>
+        <div class="glass-panel p-3  flex flex-col items-center"><span class="font-mono text-[10px] text-ink-dim">STREAK</span><span id="profile-streak" class="font-display text-secondary-light text-lg">7W</span></div>
+      </div>
+      <div>
+        <p class="font-mono text-[11px] text-ink-dim mb-2 uppercase tracking-widest">Badges</p>
+        <div class="flex gap-3">
+          <span class="material-symbols-outlined text-gold fill-icon text-3xl">military_tech</span>
+          <span class="material-symbols-outlined text-primary fill-icon text-3xl">bolt</span>
+          <span class="material-symbols-outlined text-secondary-light fill-icon text-3xl">local_fire_department</span>
+          <span class="material-symbols-outlined text-ink-dim/40 text-3xl">lock</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <!-- GAMEPLAY SCREEN -->
+  <!-- ============================================================ -->
+  <div id="screen-game" class="screen">
+    <div class="particle-field opacity-40" id="game-particles"></div>
+
+    <header class="absolute top-0 left-0 w-full z-30 flex justify-between items-center pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] h-16 pt-[env(safe-area-inset-top)] bg-black/90 backdrop-blur-2xl border-b border-primary/30">
+      <div class="flex items-center gap-2">
+        <div class="w-9 h-9 rounded-full border-2 border-primary/70 flex items-center justify-center glass-panel">
+          <span class="material-symbols-outlined text-primary fill-icon text-lg">shield_person</span>
+        </div>
+        <div class="flex flex-col leading-tight">
+          <span class="font-display text-[12px] text-primary italic-techno">COMMANDER_01</span>
+          <span id="game-accuracy" class="font-mono text-[9px] text-primary/70 tracking-widest uppercase">ACC: 88%</span>
+        </div>
+      </div>
+      <div class="flex flex-col items-center relative">
+        <div class="w-12 h-12 rounded-full glass-panel border-2 border-primary flex items-center justify-center">
+          <span id="game-timer" class="font-display text-base text-white italic">90</span>
+        </div>
+        <span id="game-score" class="font-mono text-[9px] text-primary/70 mt-0.5 tracking-widest">00 : 00</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <div class="flex flex-col leading-tight text-right">
+          <span class="font-display text-[12px] text-secondary-light italic-techno">CYBER_VOID</span>
+          <span id="game-ai-streak" class="font-mono text-[9px] text-secondary-light/70 tracking-widest uppercase">STREAK: X0</span>
+        </div>
+        <div class="w-9 h-9 rounded-full border-2 border-secondary-light/70 flex items-center justify-center glass-panel">
+          <span class="material-symbols-outlined text-secondary-light fill-icon text-lg">smart_toy</span>
+        </div>
+        <button id="btn-pause" class="w-8 h-8 flex items-center justify-center text-ink-dim hover:text-primary ml-1">
+          <span class="material-symbols-outlined">pause_circle</span>
+        </button>
+      </div>
+    </header>
+
+    <div id="toast-stack"></div>
+
+    <main class="relative flex-1 w-full overflow-hidden">
+      <div id="table-perspective" class="absolute inset-0 flex items-end justify-center overflow-hidden pb-[1vh]">
+        <div id="table-surface" class="h-[84vh] aspect-[1/4] max-w-[92vw] shadow-[0_90px_140px_rgba(0,0,0,0.98)]" style="width: auto;">
+          <!-- Physical 3D Beveled Side Rails -->
+          <div class="absolute left-0 right-0 top-0 bottom-0 border-[3px] border-primary/50 pointer-events-none z-20"></div>
+          <div class="absolute left-[-22px] top-0 bottom-0 w-[22px] bg-[#07090c] border-y border-l border-primary/50 shadow-[inset_0_0_25px_rgba(0,243,255,0.2)]" style="transform-origin: right; transform: rotateY(-90deg);"></div>
+          <div class="absolute right-[-22px] top-0 bottom-0 w-[22px] bg-[#07090c] border-y border-r border-primary/50 shadow-[inset_0_0_25px_rgba(0,243,255,0.2)]" style="transform-origin: left; transform: rotateY(90deg);"></div>
+          <div class="absolute top-[-22px] left-0 right-0 h-[22px] bg-[#07090c] border-x border-t border-primary/50 shadow-[inset_0_0_25px_rgba(0,243,255,0.2)]" style="transform-origin: bottom; transform: rotateX(90deg);"></div>
+          <div class="absolute bottom-[-22px] left-0 right-0 h-[22px] bg-[#0f1118] border-x border-b border-primary/70 shadow-[inset_0_0_35px_rgba(0,243,255,0.35)]" style="transform-origin: top; transform: rotateX(-90deg);"></div>
+
+          <div class="absolute inset-0 table-plate overflow-hidden"></div>
+          <div id="star-layer" class="star-layer"></div>
+          <div class="absolute inset-0 carbon-texture"></div>
+          <div class="absolute inset-0 tactical-grid pointer-events-none"></div>
+          <div class="absolute inset-0 table-sheen pointer-events-none"></div>
+
+          <!-- Tournament Center Crest & Split Line -->
+          <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none flex items-center justify-center">
+            <span class="material-symbols-outlined table-hologram">sports_bar</span>
+            <div class="hologram-ring"></div>
+            <div class="absolute font-mono text-[8px] text-primary/40 tracking-[0.3em] uppercase whitespace-nowrap mt-24">WSOBP 8FT REGULATION</div>
+          </div>
+
+          <!-- Regulation Rack Target Triangles -->
+          <div class="rack-target rack-target-ai"></div>
+          <div class="rack-target rack-target-player"></div>
+
+          <!-- Central Throwing Lane with Distance Tick Marks -->
+          <div class="throw-lane">
+            <div class="absolute top-[25%] left-0 right-0 h-px bg-primary/20"></div>
+            <div class="absolute top-[50%] left-0 right-0 h-px bg-primary/20"></div>
+            <div class="absolute top-[75%] left-0 right-0 h-px bg-primary/20"></div>
+            <div class="throw-lane-beam"></div>
+            <div class="throw-reticle"><div class="throw-reticle-dot"></div></div>
+          </div>
+
+          <!-- 8FT Center Foul / Mid-court Line -->
+          <div class="absolute top-1/2 left-1/2 -translate-x-1/2 w-[90%] h-px bg-gradient-to-r from-transparent via-primary/70 to-transparent pointer-events-none"></div>
+
+          <!-- Player & AI 10-Cup Pyramid Formations -->
+          <div id="ai-cups" class="cup-formation cup-formation-ai" data-lane="ai"></div>
+          <div id="player-cups" class="cup-formation cup-formation-player" data-lane="player"></div>
+
+          <div class="absolute inset-0 table-vignette pointer-events-none"></div>
+        </div>
+      </div>
+      <div id="aim-layer" class="aim-layer"></div>
+      <div id="aim-hint" class="aim-hint">Drag to place crosshair over target</div>
+
+      <!-- STAGE 1: Precision crosshair (landing target selection) -->
+      <div id="aim-crosshair" class="aim-crosshair">
+        <div class="crosshair-ring"></div>
+        <div class="crosshair-tick tick-n"></div>
+        <div class="crosshair-tick tick-s"></div>
+        <div class="crosshair-tick tick-e"></div>
+        <div class="crosshair-tick tick-w"></div>
+        <div class="crosshair-dot"></div>
+      </div>
+    </main>
+
+    <canvas id="aim-canvas"></canvas>
+
+    <!-- STAGE 2: Live shot-quality readout (power / arc / spin / release) -->
+    <div id="aim-stats-hud" class="aim-stats-hud">
+      <div class="aim-stat-row">
+        <span class="aim-stat-label">ARC</span>
+        <div class="aim-stat-track"><div id="arc-fill" class="aim-stat-fill fill-cyan"></div></div>
+      </div>
+      <div class="aim-stat-row">
+        <span class="aim-stat-label">SPIN</span>
+        <div class="aim-stat-track spin-track"><div id="spin-fill" class="aim-stat-fill fill-magenta"></div></div>
+      </div>
+      <div class="aim-stat-row">
+        <span class="aim-stat-label">RELEASE</span>
+        <div class="aim-stat-track"><div id="release-fill" class="aim-stat-fill fill-green"></div></div>
+      </div>
+      <div id="release-readout" class="aim-release-readout">—</div>
+    </div>
+
+    <div id="ball-shadow"></div>
+    <div id="ball"></div>
+
+    <!-- LEFT HUD: power meter -->
+    <div class="absolute left-3 top-1/2 -translate-y-1/2 z-30 flex flex-col items-center gap-3">
+      <div class="power-track"><div id="power-fill" class="power-fill" style="height:75%"></div></div>
+      <div class="glass-panel px-2 py-1.5  flex flex-col items-center min-w-[54px]">
+        <span class="font-mono text-[9px] text-primary/80">POWER</span>
+        <span id="power-readout" class="font-display text-sm text-white">75%</span>
+      </div>
+    </div>
+
+    <!-- RIGHT HUD: trick meter + adjustments -->
+    <div class="absolute right-3 top-1/2 -translate-y-1/2 z-30 flex flex-col items-center gap-4">
+      <div class="flex flex-col items-center gap-1">
+        <span class="font-mono text-[8px] text-primary/70">TRICK</span>
+        <div id="trick-segments" class="segmented"></div>
+      </div>
+      <button data-adjust="wind" class="hud-btn w-12 h-12 rounded-xl flex flex-col items-center justify-center gap-0.5 active:scale-90 transition-transform duration-300 ease-out">
+        <span class="material-symbols-outlined text-primary text-lg">air</span>
+        <span id="wind-value" class="font-mono text-[7px] text-primary/70">LOW</span>
+      </button>
+      <button data-adjust="spin" class="hud-btn w-12 h-12 rounded-xl flex flex-col items-center justify-center gap-0.5 active:scale-90 transition-transform duration-300 ease-out">
+        <span class="material-symbols-outlined text-primary text-lg">cyclone</span>
+        <span id="spin-value" class="font-mono text-[7px] text-primary/70">OFF</span>
+      </button>
+      <button data-adjust="sens" class="hud-btn w-12 h-12 rounded-xl flex flex-col items-center justify-center gap-0.5 active:scale-90 transition-transform duration-300 ease-out">
+        <span class="material-symbols-outlined text-primary text-lg">radar</span>
+        <span id="sens-value" class="font-mono text-[7px] text-primary/70">70</span>
+      </button>
+    </div>
+
+    <!-- BOTTOM ACTION BAR -->
+    <footer class="absolute bottom-0 left-0 w-full z-30 flex justify-between items-end pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] pb-[calc(1.5rem+env(safe-area-inset-bottom))] h-32 pointer-events-none">
+      <div class="flex gap-3 pointer-events-auto">
+        <button id="btn-quick-loadout" class="w-12 h-12 hud-btn rounded-xl flex items-center justify-center active:scale-90 transition-transform duration-300 ease-out">
+          <span class="material-symbols-outlined text-primary">style</span>
+        </button>
+        <button id="btn-quick-log" class="w-12 h-12 hud-btn rounded-xl flex items-center justify-center active:scale-90 transition-transform duration-300 ease-out">
+          <span class="material-symbols-outlined text-primary">history</span>
+        </button>
+      </div>
+
+      <div class="relative pointer-events-auto group mb-1 flex flex-col items-center gap-2">
+        <button id="btn-trick-shot" class="hud-btn w-14 h-14 rounded-full flex items-center justify-center opacity-60 transition-transform duration-300 ease-out">
+          <span class="material-symbols-outlined text-primary">magic_button</span>
+        </button>
+        <div class="relative">
+          <div class="absolute -inset-6 bg-primary/25 blur-2xl rounded-full overdrive-glow"></div>
+          <button id="btn-throw" class="relative w-44 h-16 bg-primary text-black font-display text-lg chamfer-btn active:scale-95 transition-transform duration-300 ease-out flex items-center justify-center gap-2 shadow-glow-cyan">
+            <span class="material-symbols-outlined font-black">bolt</span>
+            <span class="italic-techno font-black">THROW</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="flex gap-3 pointer-events-auto">
+        <button id="btn-quick-profile" class="w-12 h-12 hud-btn rounded-xl flex items-center justify-center active:scale-90 transition-transform duration-300 ease-out">
+          <span class="material-symbols-outlined text-primary">workspace_premium</span>
+        </button>
+        <button id="btn-open-settings-game" class="w-12 h-12 hud-btn rounded-xl flex items-center justify-center active:scale-90 transition-transform duration-300 ease-out">
+          <span class="material-symbols-outlined text-primary">tune</span>
+        </button>
+      </div>
+    </footer>
+
+    <div class="absolute inset-0 pointer-events-none shadow-[inset_0_0_140px_rgba(0,0,0,0.95)] z-20"></div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- PAUSE MENU -->
+  <!-- ============================================================ -->
+  <div id="modal-pause" class="modal-center">
+    <div class="modal-card glass-panel w-[82%] max-w-md rounded-2xl p-6 flex flex-col items-center gap-4">
+      <span class="material-symbols-outlined text-primary text-4xl">pause_circle</span>
+      <h2 class="font-display text-primary text-xl italic-techno tracking-widest">PAUSED</h2>
+      <button id="btn-resume" class="w-full py-3 chamfer-btn bg-primary text-black font-display italic-techno tracking-wide active:scale-95 transition-transform duration-300 ease-out">RESUME</button>
+      <button id="btn-restart" class="w-full py-3 chamfer-btn bg-s2 border border-secondary text-secondary-light font-display italic-techno tracking-wide active:scale-95 transition-transform duration-300 ease-out">RESTART MATCH</button>
+      <button id="btn-pause-settings" class="w-full py-3 chamfer-btn bg-s2 border border-primary/40 text-primary font-display italic-techno tracking-wide active:scale-95 transition-transform duration-300 ease-out">SETTINGS</button>
+      <button id="btn-quit" class="w-full py-3 chamfer-btn bg-s2 border border-magenta/50 text-magenta font-display italic-techno tracking-wide active:scale-95 transition-transform duration-300 ease-out">QUIT TO MENU</button>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- GAME OVER MODAL -->
+  <!-- ============================================================ -->
+  <div id="modal-gameover" class="modal-center">
+    <div class="modal-card glass-panel w-[86%] max-w-md rounded-2xl p-6 flex flex-col items-center gap-3 text-center">
+      <span id="go-icon" class="material-symbols-outlined text-5xl fill-icon">emoji_events</span>
+      <h2 id="go-title" class="font-display text-2xl italic-techno tracking-widest neon-text">VICTORY</h2>
+      <p id="go-subtitle" class="font-mono text-xs text-ink-dim uppercase tracking-widest">Arena Cleared</p>
+      <div class="w-full grid grid-cols-2 gap-3 my-2">
+        <div class="glass-panel p-3 "><p class="font-mono text-[9px] text-ink-dim">FINAL SCORE</p><p id="go-score" class="font-display text-primary text-lg">10 : 4</p></div>
+        <div class="glass-panel p-3 "><p class="font-mono text-[9px] text-ink-dim">XP GAINED</p><p id="go-xp" class="font-display text-gold text-lg">+240</p></div>
+      </div>
+      <button id="btn-rematch" class="w-full py-3 chamfer-btn bg-primary text-black font-display italic-techno tracking-wide active:scale-95 transition-transform duration-300 ease-out">REMATCH</button>
+      <button id="btn-gameover-menu" class="w-full py-3 chamfer-btn bg-s2 border border-primary/40 text-primary font-display italic-techno tracking-wide active:scale-95 transition-transform duration-300 ease-out">MAIN MENU</button>
+    </div>
+  </div>
+
+</div>
+
+
+<script src="js/modules/GameStateManager.js"></script>
+<script src="js/modules/Util.js"></script>
+<script src="js/modules/AudioController.js"></script>
+<script src="js/modules/EffectsManager.js"></script>
+<script src="js/modules/CupManager.js"></script>
+<script src="js/modules/BallController.js"></script>
+<script src="js/modules/UIRenderer.js"></script>
+<script src="js/modules/Renderer.js"></script>
+<script src="js/modules/CameraController.js"></script>
+<script src="js/modules/PhysicsEngine.js"></script>
+
+<script src="js/modules/TrajectoryPredictor.js"></script>
+<script src="js/modules/InputManager.js"></script>
+<script src="js/modules/ThrowController.js"></script>
+<script src="js/modules/AIController.js"></script>
+<script src="js/modules/Main.js"></script>
+
+</body>
+</html>
