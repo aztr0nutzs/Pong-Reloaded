@@ -225,10 +225,6 @@ class ThrowController {
         }
         
         return new Promise(function(resolve) {
-            if (window.GameStateManager && window.GameStateManager.state) {
-                window.GameStateManager.state.ball.active = true;
-            }
-            
             self.activeSim = self.engine.startLiveSimulation(
                 initParams, cupsEls, tableGeometry, difficulty, windAccel,
                 (sim) => {
@@ -295,27 +291,24 @@ class ThrowController {
     performPlayerThrow(sol) {
         ShotSolution.assertValid(sol);
         var m = window.state ? window.state.match : null;
-        if (!m || !m.active) return;
-        
-        m.busy = true;
-        m.attempts++;
+        var generation = window.GameStateManager ? GameStateManager.claimPlayerThrow() : null;
+        if (!m || generation === null) return false;
         
         var remainingCups = qsa('#ai-cups .cup:not(.hit)');
         if (!remainingCups.length) {
             if (window.finishMatch) finishMatch('win');
-            m.busy = false;
-            return;
+            return true;
         }
         
         this.playbackShot(sol).then(function(liveSim) {
+            if (!GameStateManager.isCurrent(generation)) return;
             var willHit = liveSim.outcome === 'hit' && !!liveSim.hitCupEl;
             var hitCupElement = willHit ? liveSim.hitCupEl : null;
+            var cupKey = hitCupElement ? hitCupElement.dataset.idx : null;
+            var scored = GameStateManager.resolveThrow('player', willHit, cupKey);
             
-            if (willHit) {
-                m.hits++;
+            if (scored) {
                 hitCupElement.classList.add('hit');
-                m.aiRemaining--;
-                m.trickMeter = clamp(m.trickMeter + 16, 0, 100);
                 
                 if (window.SFX) SFX.hit();
                 if (window.UIRenderer) UIRenderer.toast('CUP DESTROYED');
@@ -330,16 +323,15 @@ class ThrowController {
             
             if (m.aiRemaining <= 0) {
                 if (window.finishMatch) finishMatch('win');
-                m.busy = false;
                 return;
             }
             
-            m.turn = 'ai';
-            m.busy = false;
-            setTimeout(function() {
+            GameStateManager.advanceTurn('player');
+            GameStateManager.schedule(function() {
                 if (window.AI) window.AI.performAiThrow();
-            }, 900);
+            }, 900, [GameStateManager.STATES.AI_AIM]);
         });
+        return true;
     }
 }
 window.ThrowController = ThrowController;

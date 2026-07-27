@@ -6,7 +6,7 @@ class BallController {
         var position = window.Physics.world.launchPosition(fromTeam);
         
         let state = GameStateManager.getState();
-        state.ball.active = true;
+        GameStateManager.setBallVisible(true);
         state.ball.prevX = position.x;
         state.ball.prevY = position.y;
         state.ball.prevZ = position.z;
