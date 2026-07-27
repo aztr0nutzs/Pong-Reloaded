@@ -13,14 +13,14 @@ class AIController {
        by the exact same deterministic physics engine used for the player. */
     performAiThrow(){
       var m = state.match;
-      if(!m || !m.active || m.paused || m.autoPaused) return;
-      m.busy = true;
+      var generation = window.GameStateManager ? GameStateManager.claimAiThrow() : null;
+      if(!m || generation === null) return false;
       resetBallPosition('ai');
       var diffChance = this.DIFF_AI_HIT[state.settings.difficulty] || 0.44;
       var aimsWell = Math.random() < diffChance;
       var remainingCups = qsa('#player-cups .cup:not(.hit)');
       var target = remainingCups.length ? pick(remainingCups) : null;
-      if(!target){ finishMatch('lose'); m.busy=false; return; }
+      if(!target){ finishMatch('lose'); return true; }
 
       var ballStart = this.engine.world.launchPosition('ai');
       var targetPosition = this.engine.world.geometry.cupPosition('player', Number(target.dataset.idx));
@@ -46,10 +46,13 @@ class AIController {
       var self = this;
 
       this.thrower.playback.bind(this.thrower)(initParams, depthRef, cupsEls, tableGeometry, difficulty, 0).then(function(liveSim){
+        if (!GameStateManager.isCurrent(generation)) return;
         sim = liveSim; // Update outcome with live sim
-        if(sim.outcome === 'hit' && sim.hitCupEl){
+        var willHit = sim.outcome === 'hit' && !!sim.hitCupEl;
+        var cupKey = sim.hitCupEl ? sim.hitCupEl.dataset.idx : null;
+        var scored = GameStateManager.resolveThrow('ai', willHit, cupKey);
+        if(scored){
           sim.hitCupEl.classList.add('hit');
-          m.playerRemaining--;
           SFX.hit();
           toast('AI SCORES');
           haptic(20);
@@ -60,11 +63,11 @@ class AIController {
         resetBallPosition('player');
         
 
-        if(m.playerRemaining <= 0){ finishMatch('lose'); m.busy=false; return; }
+        if(m.playerRemaining <= 0){ finishMatch('lose'); return; }
 
-        m.turn = 'player';
-        m.busy = false;
+        GameStateManager.advanceTurn('ai');
       });
+      return true;
     }
 }
 window.AIController = AIController;
