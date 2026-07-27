@@ -12,6 +12,7 @@ class PhysicsConstants {
         spinDecay: 0.6,
         magnusAccelerationFactor: 0.00012,
         stopSpeed: 0.015,
+        bounceStopSpeed: 0.08,
         fixedTimeStep: 1 / 120
     });
 }
@@ -185,6 +186,7 @@ class PhysicsEngine {
       this.MAGNUS_ACCELERATION_FACTOR = constants.magnusAccelerationFactor;
 
       this.STOP_SPEED = constants.stopSpeed;
+      this.BOUNCE_STOP_SPEED = constants.bounceStopSpeed;
       this.FIXED_DT = constants.fixedTimeStep;
       
       this.liveSimulations = [];
@@ -354,6 +356,9 @@ class PhysicsEngine {
                 y: s.orientation ? s.orientation.y : 0,
                 z: s.orientation ? s.orientation.z : 0
             },
+            onTable: false,
+            offTable: false,
+            surfaceState: 'airborne',
             airborne: true,
             contactState: { type: 'none', cupElement: null },
             activeContacts: []
@@ -367,10 +372,22 @@ class PhysicsEngine {
         s.previousPosition = { x: s.prevX, y: s.prevY, z: s.prevZ };
         s.velocity = { x: s.vx, y: s.vy, z: s.vz };
         s.angularVelocity = { x: s.angularVelocityX || 0, y: s.angularVelocityY || 0, z: s.angularVelocityZ || 0 };
-        s.airborne = s.z > this.world.geometry.table.surfaceHeight + 0.0005 && !s.insideCup;
-        var contactType = s.event || (s.insideCup ? 'cup-interior' : (s.airborne ? 'none' : 'table'));
+        var table = this.world.geometry.table;
+        s.onTable = !s.insideCup && this.isOverTable(s.x, s.y) &&
+            s.z <= table.surfaceHeight + 0.0005;
+        s.offTable = !s.insideCup && !this.isOverTable(s.x, s.y);
+        s.airborne = !s.insideCup && !s.onTable && s.z > table.groundHeight + 0.0005;
+        s.surfaceState = s.insideCup ? 'cup' : (s.onTable ?
+            (Math.hypot(s.vx, s.vy) < this.STOP_SPEED ? 'settled' : 'rolling') :
+            (s.offTable ? 'off-table' : 'airborne'));
+        var contactType = s.event || (s.insideCup ? 'cup-interior' : (s.onTable ? 'table' : 'none'));
         s.contactState = { type: contactType, cupElement: s.insideCup ? s.insideCup.el : null };
         s.activeContacts = contactType === 'none' ? [] : [s.contactState];
+    }
+
+    isOverTable(x, y) {
+        var bounds = this.world.geometry.table.bounds;
+        return x >= bounds.left && x <= bounds.right && y >= bounds.top && y <= bounds.bottom;
     }
 
     evaluateSettlement(s) {
@@ -382,9 +399,13 @@ class PhysicsEngine {
                 s.outcome = 'hit';
                 s.hitCupEl = s.insideCup.el;
             }
-        } else if (s.z <= 0.0005 && horizontalSpeed < this.STOP_SPEED) {
+        } else if (this.isOverTable(s.x, s.y) && s.z <= this.world.geometry.table.surfaceHeight + 0.0005 &&
+            Math.abs(s.vz) < this.BOUNCE_STOP_SPEED && horizontalSpeed < this.STOP_SPEED) {
             s.settled = true;
             s.outcome = s.outcome || 'miss';
+            s.vx = 0;
+            s.vy = 0;
+            s.vz = 0;
         }
     }
 
@@ -516,7 +537,8 @@ class PhysicsEngine {
                     s.vz -= (1 + this.RIM_BOUNCE_E) * vn * nz;
                     
                     // Spin coupling on rim contact
-                    this.applySurfaceSpinTransfer(s, nx, ny, nz, this.SLIDE_FRICTION);
+                    this.applySurfaceSpinTransfer(s, nx, ny, nz, this.SLIDE_FRICTION,
+                        (1 + this.RIM_BOUNCE_E) * -vn);
 
                     // Event classification
                     let inwardDir = (-uX * s.vx) + (-uY * s.vy);
@@ -574,7 +596,8 @@ class PhysicsEngine {
                             s.vx -= (1 + this.CUP_WALL_E) * vn * nx;
                             s.vy -= (1 + this.CUP_WALL_E) * vn * ny;
                             s.vz -= (1 + this.CUP_WALL_E) * vn * nz;
-                            this.applySurfaceSpinTransfer(s, nx, ny, nz, this.SLIDE_FRICTION);
+                            this.applySurfaceSpinTransfer(s, nx, ny, nz, this.SLIDE_FRICTION,
+                                (1 + this.CUP_WALL_E) * -vn);
                             s.event = 'hard-rebound';
                         }
                         
@@ -607,7 +630,8 @@ class PhysicsEngine {
                         s.vx -= (1 + this.CUP_WALL_E) * vn * nx;
                         s.vy -= (1 + this.CUP_WALL_E) * vn * ny;
                         s.vz -= (1 + this.CUP_WALL_E) * vn * nz;
-                        this.applySurfaceSpinTransfer(s, nx, ny, nz, this.SLIDE_FRICTION);
+                        this.applySurfaceSpinTransfer(s, nx, ny, nz, this.SLIDE_FRICTION,
+                            (1 + this.CUP_WALL_E) * -vn);
                         s.event = 'interior-bounce';
                     }
                     let push = (dist2D + this.BALL_R) - innerRAtZ;
@@ -644,48 +668,38 @@ class PhysicsEngine {
             }
         }
         
-        // 4. Table Surface & Ground Collision Solver
+        // 4. Authoritative WorldGeometry table surface and off-table ground solver.
         if (!s.insideCup) {
-            let tableHeight = this.world.geometry.table.surfaceHeight;
-            let GROUND_Z = this.world.geometry.table.groundHeight;
-            
-            if (nextZ <= tableHeight) {
-                if (tableGeometry && nextX >= tableGeometry.left && nextX <= tableGeometry.right && nextY >= tableGeometry.top && nextY <= tableGeometry.bottom) {
-                    if (s.vz < 0) {
-                        s.bounces++;
-                        s.vz = Math.abs(s.vz) * this.TABLE_BOUNCE_E;
-                        s.event = 'bounce';
-                        
-                        // Spin transfer on table bounce (Sidespin kicks ball sideways on impact)
-                        this.applySurfaceSpinTransfer(s, 0, 0, 1, this.SLIDE_FRICTION);
-                        
-                        let vtX = s.vx;
-                        let vtY = s.vy;
-                        let vtMag = Math.sqrt(vtX*vtX + vtY*vtY);
-                        if (vtMag > 0) {
-                            let slideLoss = this.SLIDE_FRICTION * Math.abs(s.vz);
-                            let rollLoss = this.ROLL_FRICTION * dt * this.GRAVITY;
-                            let totalLoss = Math.min(vtMag, slideLoss + rollLoss);
-                            s.vx -= (vtX/vtMag) * totalLoss;
-                            s.vy -= (vtY/vtMag) * totalLoss;
-                        }
-                        
-                        if (s.vz < 0.020) s.vz = 0;
-                    }
-                    nextZ = tableHeight;
-                } else if (nextZ <= GROUND_Z) {
-                    nextZ = GROUND_Z;
-                    s.vx = 0; s.vy = 0; s.vz = 0;
-                    s.settled = true;
+            let table = this.world.geometry.table;
+            let tableHeight = table.surfaceHeight;
+            let wasSupported = s.z <= tableHeight + 0.0005 && this.isOverTable(s.x, s.y);
+            let crossingFraction = s.z > tableHeight && nextZ <= tableHeight ?
+                (s.z - tableHeight) / Math.max(s.z - nextZ, Number.EPSILON) : 1;
+            let impactX = s.x + (nextX - s.x) * crossingFraction;
+            let impactY = s.y + (nextY - s.y) * crossingFraction;
+            let hasTableContact = nextZ <= tableHeight &&
+                (wasSupported ? this.isOverTable(nextX, nextY) : this.isOverTable(impactX, impactY));
+
+            if (hasTableContact) {
+                let impactSpeed = Math.max(0, -s.vz);
+                if (!wasSupported && impactSpeed >= this.BOUNCE_STOP_SPEED) {
+                    s.bounces++;
+                    s.vz = impactSpeed * this.TABLE_BOUNCE_E;
+                    this.applySurfaceSpinTransfer(s, 0, 0, 1, this.SLIDE_FRICTION,
+                        (1 + this.TABLE_BOUNCE_E) * impactSpeed);
+                    s.event = 'bounce';
+                } else {
+                    s.vz = 0;
+                    this.applySurfaceSpinTransfer(s, 0, 0, 1, this.SLIDE_FRICTION,
+                        this.GRAVITY * dt);
+                    this.applyRollingResistance(s, dt);
                 }
-            }
-            
-            // Table Edge Bounds Solver
-            if(tableGeometry && nextZ >= tableHeight - 0.020 && nextZ <= tableHeight + 0.020){
-                if(nextX < tableGeometry.left + this.BALL_R){ nextX = tableGeometry.left + this.BALL_R; s.vx = Math.abs(s.vx) * 0.5; }
-                if(nextX > tableGeometry.right - this.BALL_R){ nextX = tableGeometry.right - this.BALL_R; s.vx = -Math.abs(s.vx) * 0.5; }
-                if(nextY < tableGeometry.top + this.BALL_R){ nextY = tableGeometry.top + this.BALL_R; s.vy = Math.abs(s.vy) * 0.5; }
-                if(nextY > tableGeometry.bottom - this.BALL_R){ nextY = tableGeometry.bottom - this.BALL_R; s.vy = -Math.abs(s.vy) * 0.5; }
+                nextZ = tableHeight;
+            } else if (nextZ <= table.groundHeight) {
+                nextZ = table.groundHeight;
+                s.vx = 0; s.vy = 0; s.vz = 0;
+                s.settled = true;
+                s.outcome = s.outcome || 'miss';
             }
         }
         
@@ -697,14 +711,11 @@ class PhysicsEngine {
     /**
      * Tangential spin impulse coupling: converts angular momentum into linear velocity shift on surface contact.
      */
-    applySurfaceSpinTransfer(s, nx, ny, nz, frictionCoeff) {
+    applySurfaceSpinTransfer(s, nx, ny, nz, frictionCoeff, normalDeltaVelocity) {
         let wx = s.angularVelocityX || 0;
         let wy = s.angularVelocityY || 0;
         let wz = s.angularVelocityZ || 0;
         
-        let spinMag = Math.sqrt(wx*wx + wy*wy + wz*wz);
-        if (spinMag < 0.01) return;
-
         // Tangential velocity generated by spin at contact point r = -n * R
         // v_tangent_spin = w x r = w x (-n * R) = R * (n x w)
         let R = this.BALL_R;
@@ -712,16 +723,49 @@ class PhysicsEngine {
         let cy = R * (nz * wx - nx * wz);
         let cz = R * (nx * wy - ny * wx);
 
-        // Apply friction transfer impulse to linear velocity
-        let transferFactor = frictionCoeff * 0.15;
-        s.vx += cx * transferFactor;
-        s.vy += cy * transferFactor;
-        s.vz += cz * transferFactor;
+        let contactVx = s.vx + cx;
+        let contactVy = s.vy + cy;
+        let contactVz = s.vz + cz;
+        let normalSpeed = contactVx * nx + contactVy * ny + contactVz * nz;
+        let slipX = contactVx - normalSpeed * nx;
+        let slipY = contactVy - normalSpeed * ny;
+        let slipZ = contactVz - normalSpeed * nz;
+        let slipSpeed = Math.hypot(slipX, slipY, slipZ);
+        if (slipSpeed < 0.000001) return;
 
-        // Angular momentum conservation damping
-        s.angularVelocityX *= (1 - transferFactor);
-        s.angularVelocityY *= (1 - transferFactor);
-        s.angularVelocityZ *= (1 - transferFactor);
+        // A solid sphere has an effective tangential contact mass of 2m/7.
+        // Coulomb-limit the impulse so friction can exchange spin and translation,
+        // but can never add contact energy.
+        let effectiveMass = 2 * this.BALL_MASS / 7;
+        let desiredImpulse = effectiveMass * slipSpeed;
+        let maxImpulse = frictionCoeff * this.BALL_MASS * Math.max(0, normalDeltaVelocity || 0);
+        let impulse = Math.min(desiredImpulse, maxImpulse);
+        let jx = -slipX / slipSpeed * impulse;
+        let jy = -slipY / slipSpeed * impulse;
+        let jz = -slipZ / slipSpeed * impulse;
+        s.vx += jx / this.BALL_MASS;
+        s.vy += jy / this.BALL_MASS;
+        s.vz += jz / this.BALL_MASS;
+
+        let inertia = 0.4 * this.BALL_MASS * this.BALL_R * this.BALL_R;
+        let rx = -nx * this.BALL_R;
+        let ry = -ny * this.BALL_R;
+        let rz = -nz * this.BALL_R;
+        s.angularVelocityX += (ry * jz - rz * jy) / inertia;
+        s.angularVelocityY += (rz * jx - rx * jz) / inertia;
+        s.angularVelocityZ += (rx * jy - ry * jx) / inertia;
+    }
+
+    applyRollingResistance(s, dt) {
+        let speed = Math.hypot(s.vx, s.vy);
+        if (speed === 0) return;
+        let loss = Math.min(speed, this.ROLL_FRICTION * this.GRAVITY * dt);
+        s.vx *= (speed - loss) / speed;
+        s.vy *= (speed - loss) / speed;
+        if (speed - loss < this.STOP_SPEED) {
+            s.vx = 0;
+            s.vy = 0;
+        }
     }
 }
 PhysicsEngine.CUP_EVENTS = Object.freeze(['rim', 'lip-in', 'lip-out', 'hard-rebound', 'interior-bounce', 'enter', 'soft-drop']);

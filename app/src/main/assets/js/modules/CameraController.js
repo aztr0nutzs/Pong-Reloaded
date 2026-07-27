@@ -28,6 +28,13 @@ class CameraController {
             perspectiveEl.style.justifyContent = 'center';
             perspectiveEl.style.paddingBottom = '1vh';
             perspectiveEl.style.overflow = 'hidden';
+
+            var viewportWidth = perspectiveEl.clientWidth || window.innerWidth;
+            var viewportHeight = perspectiveEl.clientHeight ||
+                (window.visualViewport ? window.visualViewport.height : window.innerHeight);
+            var heightForWidth = viewportWidth * 0.92 * 4;
+            var framedHeight = Math.min(viewportHeight * 0.88, heightForWidth);
+            document.documentElement.style.setProperty('--table-height', Math.max(1, framedHeight) + 'px');
         }
         
         if (surfaceEl) {
@@ -50,6 +57,26 @@ class CameraController {
      */
     static resetCamera() {
         CameraController.setupCamera();
+    }
+
+    static bindViewport() {
+        if (CameraController.viewportBound) return;
+        CameraController.viewportBound = true;
+        var scheduled = false;
+        var schedule = function() {
+            if (scheduled) return;
+            scheduled = true;
+            requestAnimationFrame(function() {
+                scheduled = false;
+                CameraController.setupCamera();
+            });
+        };
+        window.addEventListener('resize', schedule, { passive: true });
+        window.addEventListener('orientationchange', schedule, { passive: true });
+        if (window.visualViewport) {
+            window.visualViewport.addEventListener('resize', schedule, { passive: true });
+            window.visualViewport.addEventListener('scroll', schedule, { passive: true });
+        }
     }
 
     /**
@@ -79,3 +106,4 @@ class CameraController {
 
 window.CameraController = CameraController;
 window.applyArenaTheme = CameraController.applyArenaTheme;
+CameraController.bindViewport();
