@@ -13,6 +13,14 @@ class BallController {
         state.ball.x = position.x;
         state.ball.y = position.y;
         state.ball.z = position.z;
+        state.ball.position = { x: position.x, y: position.y, z: position.z };
+        state.ball.previousPosition = { x: position.x, y: position.y, z: position.z };
+        state.ball.velocity = { x: 0, y: 0, z: 0 };
+        state.ball.angularVelocity = { x: 0, y: 0, z: 0 };
+        state.ball.orientation = { x: 0, y: 0, z: 0 };
+        state.ball.airborne = false;
+        state.ball.contactState = { type: 'table', cupElement: null };
+        state.ball.activeContacts = [state.ball.contactState];
         state.ball.scaleDepth = 1;
         state.ball.shadowScale = 1;
         state.ball.shadowOpacity = 1;

@@ -9,11 +9,6 @@ class ThrowController {
         this.BASE_VZ = 0.350;
         this.MAX_ADDITIONAL_VZ = 1.000;
         
-        // Touch smoothing state
-        this.smoothedPull = { x: 0, y: 0 };
-        this.lastInputTime = 0;
-        this.isPulling = false;
-        
         // Active simulation cancellation reference
         this.activeSim = null;
         
@@ -22,38 +17,17 @@ class ThrowController {
     }
 
     /**
-     * Frame-rate independent touch input smoothing using a deterministic exponential filter.
-     * Smooths touch micro-jitters without introducing phase lag or non-deterministic frame drift.
+     * Returns the current normalized control input without wall-clock filtering.
+     * Physics launch state therefore depends only on the input value, never event timing.
      * @param {Object} rawPull - Raw touch pull delta {x, y}
-     * @returns {Object} Deterministically smoothed pull delta {x, y}
+     * @returns {Object} Deterministic normalized pull delta {x, y}
      */
     updateInput(rawPull) {
-        var now = performance.now();
-        var dt = this.lastInputTime ? (now - this.lastInputTime) / 1000.0 : 0.016;
-        this.lastInputTime = now;
-        
-        // Clamp dt to eliminate sudden spikes from frame drops or tab unfocus
-        dt = clamp(dt, 0.001, 0.05);
-        
-        if (!this.isPulling) {
-            this.smoothedPull.x = rawPull.x;
-            this.smoothedPull.y = rawPull.y;
-            this.isPulling = true;
-        } else {
-            // Tau = 0.04s time constant for immediate responsiveness with sub-pixel jitter filtering
-            var tau = 0.04;
-            var alpha = 1.0 - Math.exp(-dt / tau);
-            this.smoothedPull.x += (rawPull.x - this.smoothedPull.x) * alpha;
-            this.smoothedPull.y += (rawPull.y - this.smoothedPull.y) * alpha;
-        }
-        return { x: this.smoothedPull.x, y: this.smoothedPull.y };
+        return { x: rawPull.x, y: rawPull.y };
     }
     
     resetInput() {
-        this.isPulling = false;
-        this.lastInputTime = 0;
-        this.smoothedPull.x = 0;
-        this.smoothedPull.y = 0;
+        // Input is stateless; retained as the public lifecycle hook used by InputManager.
     }
 
     /**
@@ -218,7 +192,7 @@ class ThrowController {
     /**
      * Playback simulation animation loop tied to fixed physics ticks.
      */
-    playback(initParams, dt, depthRef, cupsEls, tableGeometry, difficulty, windAccel) {
+    playback(initParams, depthRef, cupsEls, tableGeometry, difficulty, windAccel) {
         var self = this;
         if (this.activeSim && typeof this.activeSim.cancel === 'function') {
             this.activeSim.cancel();
@@ -244,6 +218,14 @@ class ThrowController {
                     state.ball.x = sim.x;
                     state.ball.y = sim.y;
                     state.ball.z = sim.z;
+                    state.ball.position = sim.position;
+                    state.ball.previousPosition = sim.previousPosition;
+                    state.ball.velocity = sim.velocity;
+                    state.ball.angularVelocity = sim.angularVelocity;
+                    state.ball.orientation = sim.orientation;
+                    state.ball.airborne = sim.airborne;
+                    state.ball.contactState = sim.contactState;
+                    state.ball.activeContacts = sim.activeContacts;
                     
                     let pt = state.ball;
                     let scaleDepth = 1;
@@ -301,7 +283,7 @@ class ThrowController {
             angularVelocityY: sol.angularVelocity.y,
             angularVelocityZ: sol.angularVelocity.z
         };
-        this.playback(initialState, context.timeStep, sol.depthRange, context.cupElements, context.tableBounds, context.difficulty, context.windAcceleration).then(function(liveSim) {
+        this.playback(initialState, sol.depthRange, context.cupElements, context.tableBounds, context.difficulty, context.windAcceleration).then(function(liveSim) {
             var willHit = liveSim.outcome === 'hit' && !!liveSim.hitCupEl;
             var hitCupElement = willHit ? liveSim.hitCupEl : null;
             

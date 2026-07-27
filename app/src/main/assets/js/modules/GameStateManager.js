@@ -16,6 +16,14 @@ class GameStateManager {
         active: false,
         x: 0, y: 0, z: 0,
         prevX: 0, prevY: 0, prevZ: 0,
+        position: { x: 0, y: 0, z: 0 },
+        previousPosition: { x: 0, y: 0, z: 0 },
+        velocity: { x: 0, y: 0, z: 0 },
+        angularVelocity: { x: 0, y: 0, z: 0 },
+        orientation: { x: 0, y: 0, z: 0 },
+        airborne: false,
+        contactState: { type: 'none', cupElement: null },
+        activeContacts: [],
         scaleDepth: 1, shadowScale: 1, shadowOpacity: 0
       },
       throwAnim: null,
@@ -33,16 +41,9 @@ class GameStateManager {
         return GameStateManager.state;
     }
     
-    // Fixed physics tick step (120Hz)
-    static fixedUpdate(dt) {
-        if (window.Physics) {
-            window.Physics.fixedUpdate(dt);
-        }
-    }
-    
-    // Variable state/UI tick step
-    static update(dt) {
-        // State management updates
+    static advanceSimulation(elapsedSeconds) {
+        if (!window.Physics) return 0;
+        return window.Physics.advanceFrame(elapsedSeconds).interpolationAlpha;
     }
 }
 window.GameStateManager = GameStateManager;

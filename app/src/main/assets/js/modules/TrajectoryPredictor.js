@@ -125,7 +125,7 @@ class TrajectoryPredictor {
         });
 
         for (let i = 0; i < maxSteps && !simState.settled; i++) {
-            this.engine.step(simState, this.engine.FIXED_DT, tableGeometry, cups, windAccel);
+            this.engine.stepFixed(simState, tableGeometry, cups, windAccel);
 
             let speed = Math.sqrt(simState.vx**2 + simState.vy**2 + simState.vz**2);
             let sample = {
@@ -162,19 +162,7 @@ class TrajectoryPredictor {
                 }
             }
 
-            // Settlement logic identical to PhysicsEngine.fixedUpdate
-            let hs = Math.sqrt(simState.vx**2 + simState.vy**2);
-            if (simState.insideCup) {
-                let bFloorZ = simState.insideCup.colliders.bottomZ;
-                if (Math.abs(simState.vz) < 0.025 && simState.z <= bFloorZ + 0.003 && hs < this.engine.STOP_SPEED) {
-                    simState.settled = true;
-                    simState.outcome = 'hit';
-                    hitCupEl = simState.insideCup.el;
-                }
-            } else if (simState.z <= 0.0005 && hs < this.engine.STOP_SPEED) {
-                simState.settled = true;
-                simState.outcome = simState.outcome || 'miss';
-            }
+            if (simState.settled && simState.hitCupEl) hitCupEl = simState.hitCupEl;
         }
 
         if (!simState.settled) simState.outcome = simState.outcome || 'miss';

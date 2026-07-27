@@ -45,7 +45,7 @@ class AIController {
       var depthRef = { startY: ballStart.y, endY: ty };
       var self = this;
 
-      this.thrower.playback.bind(this.thrower)(initParams, this.engine.FIXED_DT, depthRef, cupsEls, tableGeometry, difficulty, 0).then(function(liveSim){
+      this.thrower.playback.bind(this.thrower)(initParams, depthRef, cupsEls, tableGeometry, difficulty, 0).then(function(liveSim){
         sim = liveSim; // Update outcome with live sim
         if(sim.outcome === 'hit' && sim.hitCupEl){
           sim.hitCupEl.classList.add('hit');

@@ -54,6 +54,7 @@ class Renderer {
     static stableWorldScalar(value) {
         return Math.round(value * 1e12) / 1e12;
     }
+
     static renderPreview(ctx, solution){
       if(!ctx) return;
       var w = ctx.canvas.width;
@@ -183,11 +184,11 @@ class Renderer {
         
         if (ball && state.ball && state.ball.active) {
             let pt = state.ball;
-            
-            // Interpolate position between previous and current physics steps
-            let ix = (pt.prevX !== undefined) ? pt.prevX + (pt.x - pt.prevX) * a : pt.x;
-            let iy = (pt.prevY !== undefined) ? pt.prevY + (pt.y - pt.prevY) * a : pt.y;
-            let iz = (pt.prevZ !== undefined) ? pt.prevZ + (pt.z - pt.prevZ) * a : pt.z;
+            let currentPosition = pt.position || { x: pt.x, y: pt.y, z: pt.z };
+            let previousPosition = pt.previousPosition || { x: pt.prevX, y: pt.prevY, z: pt.prevZ };
+            let ix = previousPosition.x + (currentPosition.x - previousPosition.x) * a;
+            let iy = previousPosition.y + (currentPosition.y - previousPosition.y) * a;
+            let iz = previousPosition.z + (currentPosition.z - previousPosition.z) * a;
             
             let worldPoint = { x: ix, y: iy, z: iz + window.Physics.world.geometry.ball.radius };
             let screenPoint = Renderer.worldToScreen(worldPoint);

@@ -78,7 +78,47 @@ class WorldGeometry {
 class PhysicsWorld {
     constructor(geometry) {
         this.geometry = geometry || new WorldGeometry();
-        Object.freeze(this);
+        this.fixedTimeStep = PhysicsConstants.SI.fixedTimeStep;
+        this.maxCatchUpSteps = 8;
+        this.maxFrameDelta = this.fixedTimeStep * this.maxCatchUpSteps;
+        this.accumulator = 0;
+        this.simulatedTime = 0;
+        this.droppedTime = 0;
+        this.lastStepCount = 0;
+    }
+
+    advanceFrame(elapsedSeconds, fixedStepCallback) {
+        var safeElapsed = Number.isFinite(elapsedSeconds) ? Math.max(0, elapsedSeconds) : 0;
+        var acceptedElapsed = Math.min(safeElapsed, this.maxFrameDelta);
+        this.droppedTime += safeElapsed - acceptedElapsed;
+        this.accumulator += acceptedElapsed;
+
+        var stepCount = Math.min(Math.floor(this.accumulator / this.fixedTimeStep), this.maxCatchUpSteps);
+        for (var step = 0; step < stepCount; step++) {
+            fixedStepCallback(this.fixedTimeStep);
+            this.accumulator -= this.fixedTimeStep;
+            this.simulatedTime += this.fixedTimeStep;
+        }
+
+        if (this.accumulator >= this.fixedTimeStep) {
+            var discarded = this.accumulator - (this.accumulator % this.fixedTimeStep);
+            this.accumulator -= discarded;
+            this.droppedTime += discarded;
+        }
+        this.lastStepCount = stepCount;
+        return Object.freeze({
+            stepCount: stepCount,
+            interpolationAlpha: this.accumulator / this.fixedTimeStep,
+            simulatedTime: this.simulatedTime,
+            droppedTime: this.droppedTime
+        });
+    }
+
+    resetClock() {
+        this.accumulator = 0;
+        this.simulatedTime = 0;
+        this.droppedTime = 0;
+        this.lastStepCount = 0;
     }
 
     launchPosition(team) {
@@ -152,43 +192,23 @@ class PhysicsEngine {
     
     stop() {
         this.liveSimulations = [];
+        this.world.resetClock();
     }
     
     parseCups(cupEls, difficulty) {
       return this.world.createCupBodies(cupEls, difficulty);
     }
     
-    /**
-     * Fixed physics update step driven by 120Hz accumulator loop.
-     * Guarantees frame-rate independent physics simulation.
-     */
-    fixedUpdate(dt) {
-        let stepDt = dt || this.FIXED_DT;
+    advanceFrame(elapsedSeconds) {
+        return this.world.advanceFrame(elapsedSeconds, () => this.stepLiveSimulations());
+    }
+
+    stepLiveSimulations() {
         for (let i = this.liveSimulations.length - 1; i >= 0; i--) {
             let sim = this.liveSimulations[i];
             if (!sim.settled) {
-                sim.prevX = sim.x;
-                sim.prevY = sim.y;
-                sim.prevZ = sim.z;
-                
-                this.step(sim, stepDt, sim.tableGeometry, sim.cups, sim.windAccel);
-                
+                this.stepFixed(sim, sim.tableGeometry, sim.cups, sim.windAccel);
                 if (sim.onUpdate) sim.onUpdate(sim);
-                
-                // Settlement check: deterministic rest condition
-                let hs = Math.sqrt(sim.vx*sim.vx + sim.vy*sim.vy);
-                if (sim.insideCup) {
-                    let bFloorZ = sim.insideCup.colliders.bottomZ;
-                    if (Math.abs(sim.vz) < 0.025 && sim.z <= bFloorZ + 0.003 && hs < this.STOP_SPEED) {
-                        sim.settled = true;
-                        sim.outcome = 'hit';
-                        sim.hitCupEl = sim.insideCup.el;
-                    }
-                } else if (sim.z <= 0.0005 && hs < this.STOP_SPEED) {
-                    sim.settled = true;
-                    sim.outcome = sim.outcome || 'miss';
-                }
-                
                 if (sim.settled) {
                     if (sim.onComplete) sim.onComplete(sim);
                     this.liveSimulations.splice(i, 1);
@@ -198,29 +218,23 @@ class PhysicsEngine {
     }
     
     startLiveSimulation(state, cups, tableGeometry, windAccel, onUpdate, onComplete) {
-        let sim = {
-            ...state,
-            prevX: state.x,
-            prevY: state.y,
-            prevZ: state.z,
+        let sim = Object.assign(this.createSimulationState(state), {
             cups: cups,
             tableGeometry: tableGeometry,
             windAccel: windAccel,
             onUpdate: onUpdate,
             onComplete: onComplete,
-            bounces: 0,
-            insideCup: null,
-            settled: false,
-            outcome: null,
-            hitCupEl: null,
-            event: null
-        };
+        });
         this.liveSimulations.push(sim);
         return sim;
     }
 
     cloneState(s) {
-        return {
+        return this.createSimulationState(s);
+    }
+
+    createSimulationState(s) {
+        var state = {
             x: s.x, y: s.y, z: s.z || 0,
             prevX: s.x, prevY: s.y, prevZ: s.z || 0,
             vx: s.vx, vy: s.vy, vz: s.vz,
@@ -232,14 +246,60 @@ class PhysicsEngine {
             settled: s.settled || false,
             outcome: s.outcome || null,
             hitCupEl: s.hitCupEl || null,
-            event: s.event || null
+            event: s.event || null,
+            orientation: {
+                x: s.orientation ? s.orientation.x : 0,
+                y: s.orientation ? s.orientation.y : 0,
+                z: s.orientation ? s.orientation.z : 0
+            },
+            airborne: true,
+            contactState: { type: 'none', cupElement: null },
+            activeContacts: []
         };
+        this.synchronizeStructuredState(state);
+        return state;
+    }
+
+    synchronizeStructuredState(s) {
+        s.position = { x: s.x, y: s.y, z: s.z };
+        s.previousPosition = { x: s.prevX, y: s.prevY, z: s.prevZ };
+        s.velocity = { x: s.vx, y: s.vy, z: s.vz };
+        s.angularVelocity = { x: s.angularVelocityX || 0, y: s.angularVelocityY || 0, z: s.angularVelocityZ || 0 };
+        s.airborne = s.z > this.world.geometry.table.surfaceHeight + 0.0005 && !s.insideCup;
+        var contactType = s.event || (s.insideCup ? 'cup-interior' : (s.airborne ? 'none' : 'table'));
+        s.contactState = { type: contactType, cupElement: s.insideCup ? s.insideCup.el : null };
+        s.activeContacts = contactType === 'none' ? [] : [s.contactState];
+    }
+
+    evaluateSettlement(s) {
+        let horizontalSpeed = Math.hypot(s.vx, s.vy);
+        if (s.insideCup) {
+            let bottom = s.insideCup.colliders.bottomZ;
+            if (Math.abs(s.vz) < 0.025 && s.z <= bottom + 0.003 && horizontalSpeed < this.STOP_SPEED) {
+                s.settled = true;
+                s.outcome = 'hit';
+                s.hitCupEl = s.insideCup.el;
+            }
+        } else if (s.z <= 0.0005 && horizontalSpeed < this.STOP_SPEED) {
+            s.settled = true;
+            s.outcome = s.outcome || 'miss';
+        }
     }
 
     /**
      * Advance simulation by dt using adaptive sub-stepping and Continuous Collision Detection (CCD).
      */
-    step(s, dt, tableGeometry, cups, windAccel) {
+    stepFixed(s, tableGeometry, cups, windAccel) {
+        s.prevX = s.x;
+        s.prevY = s.y;
+        s.prevZ = s.z;
+        this._integrateFixedInterval(s, tableGeometry, cups, windAccel);
+        this.evaluateSettlement(s);
+        this.synchronizeStructuredState(s);
+    }
+
+    _integrateFixedInterval(s, tableGeometry, cups, windAccel) {
+        let dt = this.FIXED_DT;
         let speed = Math.sqrt(s.vx*s.vx + s.vy*s.vy + s.vz*s.vz);
         // Adaptive sub-stepping based on current velocity to prevent tunneling
         let minSubsteps = 10;
@@ -304,6 +364,9 @@ class PhysicsEngine {
             s.angularVelocityY *= ratio;
             s.angularVelocityZ *= ratio;
         }
+        s.orientation.x += (s.angularVelocityX || 0) * dt;
+        s.orientation.y += (s.angularVelocityY || 0) * dt;
+        s.orientation.z += (s.angularVelocityZ || 0) * dt;
 
         s.event = null;
 
