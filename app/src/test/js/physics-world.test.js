@@ -68,10 +68,9 @@ assert.equal(cups.length, 10);
 assert.equal(cups[0].colliders.outerTopR, engine.world.geometry.cup.outerTopRadius);
 
 function solve(targetWorld, requestedTarget, controlPull) {
+  const controls = thrower.finalizePlayerControls(controlPull, targetWorld, requestedTarget);
   return thrower.computeSolution(
-    controlPull,
-    targetWorld,
-    requestedTarget,
+    controls,
     engine.world.launchPosition('player'),
     cupElements,
     'normal',

@@ -10,6 +10,7 @@ class ShotSolution {
         this.arc = data.arc;
         this.spin = data.spin;
         this.releaseQuality = data.releaseQuality;
+        this.solverDiagnostics = Object.freeze({ ...data.solverDiagnostics });
         this.trajectorySamples = ShotSolution.freezeRecords(data.trajectorySamples);
         this.bounceEvents = ShotSolution.freezeRecords(data.bounceEvents);
         this.landingPosition = ShotSolution.freezeVector(data.landingPosition);
@@ -63,6 +64,10 @@ class ShotSolution {
         assert(Number.isFinite(solution.arc), 'arc must be finite');
         assert(Number.isFinite(solution.spin), 'spin must be finite');
         assert(Number.isFinite(solution.releaseQuality), 'releaseQuality must be finite');
+        assert(solution.solverDiagnostics && Number.isFinite(solution.solverDiagnostics.targetError) && solution.solverDiagnostics.targetError >= 0, 'solverDiagnostics.targetError must be non-negative');
+        assert(Number.isFinite(solution.solverDiagnostics.tolerance) && solution.solverDiagnostics.tolerance > 0, 'solverDiagnostics.tolerance must be positive');
+        assert(Number.isInteger(solution.solverDiagnostics.evaluations) && solution.solverDiagnostics.evaluations > 0, 'solverDiagnostics.evaluations must be a positive integer');
+        assert(typeof solution.solverDiagnostics.converged === 'boolean', 'solverDiagnostics.converged must be boolean');
         assert(Array.isArray(solution.trajectorySamples) && solution.trajectorySamples.length > 0, 'trajectorySamples must not be empty');
         assert(Array.isArray(solution.bounceEvents), 'bounceEvents must be an array');
         solution.trajectorySamples.forEach(function(sample, index) {
@@ -199,6 +204,7 @@ class TrajectoryPredictor {
             arc: data.arc,
             spin: data.spin,
             releaseQuality: data.releaseQuality,
+            solverDiagnostics: data.solverDiagnostics,
             trajectorySamples: prediction.samples,
             bounceEvents: prediction.bouncePoints,
             landingPosition: prediction.landingPoint,

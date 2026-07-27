@@ -4,16 +4,21 @@ class ThrowController {
         this.predictor = predictor;
         
         // Configuration constants
-        this.MAX_PULL_DIST = 1;
         this.MIN_PULL = 0.08;
-        this.BASE_VZ = 0.350;
-        this.MAX_ADDITIONAL_VZ = 1.000;
+        this.DEFAULT_ARC = 0.55;
+        this.SPIN_RATE = 4.0;
+        this.MIN_VERTICAL_SPEED = 1.20;
+        this.MAX_VERTICAL_SPEED = 3.80;
+        this.MIN_HORIZONTAL_SPEED = 0.80;
+        this.MAX_HORIZONTAL_SPEED = 12.00;
+        this.SOLVER_TOLERANCE = 0.005;
+        this.COARSE_SPEED_STEPS = 7;
+        this.COARSE_HEADING_STEPS = 5;
+        this.REFINEMENT_PASSES = 3;
         
         // Active simulation cancellation reference
         this.activeSim = null;
         
-        // Cached throw parameters avoid transient allocations during drag frames.
-        this.cachedParams = {};
     }
 
     /**
@@ -41,67 +46,100 @@ class ThrowController {
         return Math.pow(clamped, 1.15);
     }
 
-    /**
-     * Authoritative calculation of ball launch velocity and spin parameters from user pull input.
-     * Guaranteed deterministic: identical inputs yield identical throw parameter vectors.
-     */
-    computeThrowParams(pull, target, ballStart) {
+    finalizePlayerControls(pull, targetWorldPosition, requestedTarget, arcPreference) {
         var sens = (window.state && window.state.settings && window.state.settings.sensitivity) ? window.state.settings.sensitivity : 70;
         var sensScale = sens / 70.0;
-        
-        var pullMag = Math.sqrt(pull.x * pull.x + pull.y * pull.y);
-        var effectiveMaxDist = Math.max(0.2, this.MAX_PULL_DIST * sensScale);
-        var rawPower = pullMag / effectiveMaxDist;
-        var power = this.getPowerCurve(rawPower);
-        
-        // Vertical pull ratio determines launch arc (height)
-        var vertRatio = clamp(pull.y / effectiveMaxDist, 0, 1.2);
-        
-        // Horizontal pull ratio determines sidespin / curve
+        var rawPower = clamp(pull.y / Math.max(0.2, sensScale), 0, 1);
         var spinRatio = clamp(pull.x / (0.4 * sensScale), -1, 1);
-        
-        // Match state modifiers
-        var spinEnabled = (window.state && window.state.match && window.state.match.spin);
-        var trickArmed = (window.state && window.state.match && window.state.match.trickArmed);
-        
-        // Vertical launch velocity (determines peak apex and flight time)
-        var arcBoost = trickArmed ? 0.200 : 0;
-        var vz = this.BASE_VZ + (this.MAX_ADDITIONAL_VZ * vertRatio) + arcBoost;
-        
-        // Theoretical time of flight to target distance
-        var gravity = this.engine ? this.engine.GRAVITY : PhysicsConstants.SI.gravity;
-        var T_actual = (2 * vz) / gravity;
-        if (T_actual <= 0.01) T_actual = 0.1;
-        
-        // Distance and direction to target
-        var dx = target.x - ballStart.x;
-        var dy = target.y - ballStart.y;
-        var targetDist = Math.sqrt(dx * dx + dy * dy);
-        var azimuth = Math.atan2(dy, dx);
-        
-        // Base horizontal velocity needed to hit target perfectly at power = 1.0
-        var vh_base = targetDist / T_actual;
-        var vh_actual = vh_base * power;
-        
-        var vx = Math.cos(azimuth) * vh_actual;
-        var vy = Math.sin(azimuth) * vh_actual;
-        
-        // Calculate angular velocities (Spin)
-        var angularX = spinEnabled ? (vertRatio * 2.0) : 0; // Topspin / Backspin
-        var angularZ = spinRatio * (trickArmed ? 4.0 : 2.0); // Lateral curve / Sidespin
-        
-        this.cachedParams.vx = vx;
-        this.cachedParams.vy = vy;
-        this.cachedParams.vz = vz;
-        this.cachedParams.angularVelocityX = angularX;
-        this.cachedParams.angularVelocityY = 0;
-        this.cachedParams.angularVelocityZ = angularZ;
-        this.cachedParams.power = power;
-        this.cachedParams.arc = vertRatio;
-        this.cachedParams.spin = spinRatio;
-        this.cachedParams.rawPower = rawPower;
-        
-        return this.cachedParams;
+        return Object.freeze({
+            targetWorldPosition: Object.freeze({ x: targetWorldPosition.x, y: targetWorldPosition.y, z: targetWorldPosition.z || 0 }),
+            requestedTarget: Object.freeze({ x: requestedTarget.x, y: requestedTarget.y }),
+            inputPull: Object.freeze({ x: pull.x, y: pull.y }),
+            power: this.getPowerCurve(rawPower),
+            arc: clamp(Number.isFinite(arcPreference) ? arcPreference : this.DEFAULT_ARC, 0, 1),
+            spin: spinRatio
+        });
+    }
+
+    _candidatePrediction(ballStart, controls, speed, heading, cupsEls, difficulty, windAccel) {
+        var verticalSpeed = this.MIN_VERTICAL_SPEED + controls.arc * (this.MAX_VERTICAL_SPEED - this.MIN_VERTICAL_SPEED);
+        var angularVelocity = { x: 0, y: 0, z: controls.spin * this.SPIN_RATE };
+        var launchVelocity = {
+            x: Math.cos(heading) * speed,
+            y: Math.sin(heading) * speed,
+            z: verticalSpeed
+        };
+        var prediction = this.predictor.simulate({
+            x: ballStart.x, y: ballStart.y, z: ballStart.z,
+            vx: launchVelocity.x, vy: launchVelocity.y, vz: launchVelocity.z,
+            angularVelocityX: angularVelocity.x,
+            angularVelocityY: angularVelocity.y,
+            angularVelocityZ: angularVelocity.z
+        }, cupsEls, this.engine.world.geometry.table.bounds, difficulty, windAccel);
+        var error = this._targetError(prediction, controls.targetWorldPosition);
+        return { speed: speed, heading: heading, launchVelocity: launchVelocity, angularVelocity: angularVelocity, prediction: prediction, error: error };
+    }
+
+    _targetError(prediction, target) {
+        var best = Infinity;
+        for (var index = 0; index < prediction.samples.length; index++) {
+            var sample = prediction.samples[index];
+            var distance = Math.hypot(sample.x - target.x, sample.y - target.y);
+            if (distance < best) best = distance;
+        }
+        return best;
+    }
+
+    _isBetterCandidate(candidate, best) {
+        return !best || candidate.error < best.error - 1e-12 ||
+            (Math.abs(candidate.error - best.error) <= 1e-12 && candidate.speed < best.speed);
+    }
+
+    solveInverse(controls, ballStart, cupsEls, difficulty, windAccel) {
+        var target = controls.targetWorldPosition;
+        var baseHeading = Math.atan2(target.y - ballStart.y, target.x - ballStart.x);
+        var powerCenter = this.MIN_HORIZONTAL_SPEED + controls.power * (this.MAX_HORIZONTAL_SPEED - this.MIN_HORIZONTAL_SPEED);
+        var envelopeHalfWidth = 0.75 + controls.power * 2.25;
+        var minimumSpeed = Math.max(this.MIN_HORIZONTAL_SPEED, powerCenter - envelopeHalfWidth);
+        var maximumSpeed = Math.min(this.MAX_HORIZONTAL_SPEED, powerCenter + envelopeHalfWidth);
+        var headingHalfWidth = 0.20;
+        var best = null;
+        var evaluations = 0;
+
+        // Stage one explores the complete power-constrained speed envelope. Stage two
+        // refines only around the deterministic best candidate until the 5 mm tolerance
+        // is reached or the bounded refinement budget is exhausted.
+        for (var speedIndex = 0; speedIndex < this.COARSE_SPEED_STEPS; speedIndex++) {
+            var speedT = speedIndex / (this.COARSE_SPEED_STEPS - 1);
+            var speed = minimumSpeed + (maximumSpeed - minimumSpeed) * speedT;
+            for (var headingIndex = 0; headingIndex < this.COARSE_HEADING_STEPS; headingIndex++) {
+                var headingT = headingIndex / (this.COARSE_HEADING_STEPS - 1);
+                var heading = baseHeading - headingHalfWidth + headingHalfWidth * 2 * headingT;
+                var candidate = this._candidatePrediction(ballStart, controls, speed, heading, cupsEls, difficulty, windAccel);
+                evaluations++;
+                if (this._isBetterCandidate(candidate, best)) best = candidate;
+            }
+        }
+
+        var speedRadius = (maximumSpeed - minimumSpeed) / (this.COARSE_SPEED_STEPS - 1);
+        var headingRadius = (headingHalfWidth * 2) / (this.COARSE_HEADING_STEPS - 1);
+        for (var pass = 0; pass < this.REFINEMENT_PASSES && best.error > this.SOLVER_TOLERANCE; pass++) {
+            speedRadius *= 0.5;
+            headingRadius *= 0.5;
+            var centerSpeed = best.speed;
+            var centerHeading = best.heading;
+            for (var speedOffset = -1; speedOffset <= 1; speedOffset++) {
+                var refinedSpeed = clamp(centerSpeed + speedOffset * speedRadius, minimumSpeed, maximumSpeed);
+                for (var headingOffset = -1; headingOffset <= 1; headingOffset++) {
+                    var refinedHeading = centerHeading + headingOffset * headingRadius;
+                    var refined = this._candidatePrediction(ballStart, controls, refinedSpeed, refinedHeading, cupsEls, difficulty, windAccel);
+                    evaluations++;
+                    if (this._isBetterCandidate(refined, best)) best = refined;
+                }
+            }
+        }
+        best.evaluations = evaluations;
+        return best;
     }
 
     /**
@@ -133,37 +171,24 @@ class ThrowController {
     /**
      * Compute full deterministic trajectory solution and collision outcomes.
      */
-    computeSolution(pull, target, requestedTarget, ballStart, cupsEls, difficulty, windAccel) {
-        var params = this.computeThrowParams(pull, target, ballStart);
+    computeSolution(controls, ballStart, cupsEls, difficulty, windAccel) {
+        var solved = this.solveInverse(controls, ballStart, cupsEls, difficulty, windAccel);
         var launchPosition = { x: ballStart.x, y: ballStart.y, z: ballStart.z };
-        var launchVelocity = { x: params.vx, y: params.vy, z: params.vz };
-        var angularVelocity = { x: params.angularVelocityX, y: params.angularVelocityY || 0, z: params.angularVelocityZ };
-        var initialState = {
-            x: launchPosition.x,
-            y: launchPosition.y,
-            z: launchPosition.z,
-            vx: launchVelocity.x,
-            vy: launchVelocity.y,
-            vz: launchVelocity.z,
-            angularVelocityX: angularVelocity.x,
-            angularVelocityY: angularVelocity.y,
-            angularVelocityZ: angularVelocity.z
-        };
-        var sim = this.predictor.simulate(initialState, cupsEls, this.engine.world.geometry.table.bounds, difficulty, windAccel);
-        var releaseQuality = clamp(1 - (params.rawPower > 1.1 ? (params.rawPower - 1.1) * 2 : 0), 0, 1);
+        var releaseQuality = clamp(1 - solved.error / Math.max(this.SOLVER_TOLERANCE * 4, 0.001), 0, 1);
 
         return this.predictor.createShotSolution({
             launchPosition: launchPosition,
-            launchVelocity: launchVelocity,
-            angularVelocity: angularVelocity,
-            targetWorldPosition: { x: target.x, y: target.y, z: 0 },
-            requestedTarget: { x: requestedTarget.x, y: requestedTarget.y, cupElement: this.findTargetCup(target, cupsEls) },
-            inputPull: { x: pull.x, y: pull.y },
-            power: params.power,
-            arc: params.arc,
-            spin: params.spin,
+            launchVelocity: solved.launchVelocity,
+            angularVelocity: solved.angularVelocity,
+            targetWorldPosition: controls.targetWorldPosition,
+            requestedTarget: { x: controls.requestedTarget.x, y: controls.requestedTarget.y, cupElement: this.findTargetCup(controls.targetWorldPosition, cupsEls) },
+            inputPull: controls.inputPull,
+            power: controls.power,
+            arc: controls.arc,
+            spin: controls.spin,
             releaseQuality: releaseQuality,
-            depthRange: { startY: ballStart.y, endY: target.y },
+            solverDiagnostics: { targetError: solved.error, tolerance: this.SOLVER_TOLERANCE, evaluations: solved.evaluations, converged: solved.error <= this.SOLVER_TOLERANCE },
+            depthRange: { startY: ballStart.y, endY: controls.targetWorldPosition.y },
             simulationContext: {
                 cupElements: cupsEls,
                 tableBounds: this.engine.world.geometry.table.bounds,
@@ -171,7 +196,7 @@ class ThrowController {
                 windAcceleration: windAccel,
                 timeStep: this.engine.FIXED_DT
             }
-        }, sim);
+        }, solved.prediction);
     }
 
     findTargetCup(target, cupElements) {

@@ -131,10 +131,14 @@ class InputManager {
       var windAccel = { LOW: 0, MED: 0.036, HIGH: 0.082 }[(state && state.match) ? state.match.wind : 'LOW'] || 0;
       var smoothedPull = window.Thrower ? window.Thrower.updateInput(controlPull) : controlPull;
       var targetWorld = Renderer.screenToWorld(this.target);
-      var sol = (valid && window.Thrower) ? window.Thrower.computeSolution(
+      var finalizedControls = (valid && window.Thrower) ? window.Thrower.finalizePlayerControls(
           smoothedPull,
           targetWorld,
           this.target,
+          window.Thrower.DEFAULT_ARC
+      ) : null;
+      var sol = finalizedControls ? window.Thrower.computeSolution(
+          finalizedControls,
           this.ballStart,
           this.cachedCupsEls,
           difficulty,
