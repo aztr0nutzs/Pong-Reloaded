@@ -4,10 +4,10 @@ class ThrowController {
         this.predictor = predictor;
         
         // Configuration constants
-        this.MAX_PULL_DIST = 250;
-        this.MIN_PULL = 20;
-        this.BASE_VZ = 350;
-        this.MAX_ADDITIONAL_VZ = 1000;
+        this.MAX_PULL_DIST = 1;
+        this.MIN_PULL = 0.08;
+        this.BASE_VZ = 0.350;
+        this.MAX_ADDITIONAL_VZ = 1.000;
         
         // Touch smoothing state
         this.smoothedPull = { x: 0, y: 0 };
@@ -76,7 +76,7 @@ class ThrowController {
         var sensScale = sens / 70.0;
         
         var pullMag = Math.sqrt(pull.x * pull.x + pull.y * pull.y);
-        var effectiveMaxDist = Math.max(50, this.MAX_PULL_DIST * sensScale);
+        var effectiveMaxDist = Math.max(0.2, this.MAX_PULL_DIST * sensScale);
         var rawPower = pullMag / effectiveMaxDist;
         var power = this.getPowerCurve(rawPower);
         
@@ -84,18 +84,18 @@ class ThrowController {
         var vertRatio = clamp(pull.y / effectiveMaxDist, 0, 1.2);
         
         // Horizontal pull ratio determines sidespin / curve
-        var spinRatio = clamp(pull.x / (100 * sensScale), -1, 1);
+        var spinRatio = clamp(pull.x / (0.4 * sensScale), -1, 1);
         
         // Match state modifiers
         var spinEnabled = (window.state && window.state.match && window.state.match.spin);
         var trickArmed = (window.state && window.state.match && window.state.match.trickArmed);
         
         // Vertical launch velocity (determines peak apex and flight time)
-        var arcBoost = trickArmed ? 200 : 0;
+        var arcBoost = trickArmed ? 0.200 : 0;
         var vz = this.BASE_VZ + (this.MAX_ADDITIONAL_VZ * vertRatio) + arcBoost;
         
         // Theoretical time of flight to target distance
-        var gravity = this.engine ? this.engine.GRAVITY : 9800;
+        var gravity = this.engine ? this.engine.GRAVITY : PhysicsConstants.SI.gravity;
         var T_actual = (2 * vz) / gravity;
         if (T_actual <= 0.01) T_actual = 0.1;
         
@@ -134,8 +134,8 @@ class ThrowController {
      * Authoritative launch calculation for AI opponent throws.
      */
     computeAiThrowParams(ballStart, targetPos, apexHeight, spinAmount) {
-        apexHeight = apexHeight || 140;
-        var gravity = this.engine ? this.engine.GRAVITY : 9800;
+        apexHeight = apexHeight || 0.140;
+        var gravity = this.engine ? this.engine.GRAVITY : PhysicsConstants.SI.gravity;
         var vz0 = Math.sqrt(2 * gravity * apexHeight);
         var T = (2 * vz0) / gravity;
         if (T <= 0.01) T = 0.1;
@@ -159,7 +159,7 @@ class ThrowController {
     /**
      * Compute full deterministic trajectory solution and collision outcomes.
      */
-    computeSolution(pull, target, ballStart, cupsEls, tableRect, difficulty, windAccel, aiCupsRect) {
+    computeSolution(pull, target, requestedTarget, ballStart, cupsEls, difficulty, windAccel) {
         var params = this.computeThrowParams(pull, target, ballStart);
         var launchPosition = { x: ballStart.x, y: ballStart.y, z: ballStart.z };
         var launchVelocity = { x: params.vx, y: params.vy, z: params.vz };
@@ -175,7 +175,7 @@ class ThrowController {
             angularVelocityY: angularVelocity.y,
             angularVelocityZ: angularVelocity.z
         };
-        var sim = this.predictor.simulate(initialState, cupsEls, tableRect, difficulty, windAccel);
+        var sim = this.predictor.simulate(initialState, cupsEls, this.engine.world.geometry.table.bounds, difficulty, windAccel);
         var releaseQuality = clamp(1 - (params.rawPower > 1.1 ? (params.rawPower - 1.1) * 2 : 0), 0, 1);
 
         return this.predictor.createShotSolution({
@@ -183,23 +183,16 @@ class ThrowController {
             launchVelocity: launchVelocity,
             angularVelocity: angularVelocity,
             targetWorldPosition: { x: target.x, y: target.y, z: 0 },
-            requestedTarget: { x: target.x, y: target.y, cupElement: this.findTargetCup(target, cupsEls) },
+            requestedTarget: { x: requestedTarget.x, y: requestedTarget.y, cupElement: this.findTargetCup(target, cupsEls) },
             inputPull: { x: pull.x, y: pull.y },
             power: params.power,
             arc: params.arc,
             spin: params.spin,
             releaseQuality: releaseQuality,
-            depthRange: { startY: ballStart.y, endY: aiCupsRect ? (aiCupsRect.top + aiCupsRect.height / 2) : ballStart.y },
+            depthRange: { startY: ballStart.y, endY: target.y },
             simulationContext: {
                 cupElements: cupsEls,
-                tableBounds: {
-                    left: tableRect.left,
-                    right: tableRect.right,
-                    top: tableRect.top,
-                    bottom: tableRect.bottom,
-                    width: tableRect.width,
-                    height: tableRect.height
-                },
+                tableBounds: this.engine.world.geometry.table.bounds,
                 difficulty: difficulty,
                 windAcceleration: windAccel,
                 timeStep: this.engine.FIXED_DT
@@ -210,11 +203,10 @@ class ThrowController {
     findTargetCup(target, cupElements) {
         var closestCup = null;
         var closestDistance = Infinity;
+        var geometry = this.engine.world.geometry;
         cupElements.forEach(function(cupElement) {
-            var rect = cupElement.getBoundingClientRect();
-            var centerX = rect.left + rect.width / 2;
-            var centerY = rect.top + rect.height / 2;
-            var distance = Math.hypot(target.x - centerX, target.y - centerY);
+            var position = geometry.cupPosition(cupElement.dataset.team, Number(cupElement.dataset.idx));
+            var distance = Math.hypot(target.x - position.x, target.y - position.y);
             if (distance < closestDistance) {
                 closestDistance = distance;
                 closestCup = cupElement;
@@ -226,7 +218,7 @@ class ThrowController {
     /**
      * Playback simulation animation loop tied to fixed physics ticks.
      */
-    playback(initParams, dt, depthRef, cupsEls, tableRect, difficulty, windAccel) {
+    playback(initParams, dt, depthRef, cupsEls, tableGeometry, difficulty, windAccel) {
         var self = this;
         if (this.activeSim && typeof this.activeSim.cancel === 'function') {
             this.activeSim.cancel();
@@ -241,7 +233,7 @@ class ThrowController {
             }
             
             self.activeSim = self.engine.startLiveSimulation(
-                initParams, cups, tableRect, windAccel,
+                initParams, cups, tableGeometry, windAccel,
                 (sim) => {
                     let state = window.GameStateManager ? window.GameStateManager.state : null;
                     if (!state) return;
@@ -258,18 +250,18 @@ class ThrowController {
                     if (depthRef) {
                         let isPlayerThrow = depthRef.startY > depthRef.endY;
                         if (isPlayerThrow) {
-                            let span = Math.max(40, depthRef.startY - depthRef.endY);
+                            let span = Math.max(0.040, depthRef.startY - depthRef.endY);
                             let t = Math.max(0, Math.min(1, (depthRef.startY - pt.y) / span));
                             scaleDepth = 1 - t * 0.4;
                         } else {
-                            let span = Math.max(40, depthRef.endY - depthRef.startY);
+                            let span = Math.max(0.040, depthRef.endY - depthRef.startY);
                             let t = Math.max(0, Math.min(1, (pt.y - depthRef.startY) / span));
                             scaleDepth = 0.6 + t * 0.4;
                         }
                     }
                     state.ball.scaleDepth = scaleDepth;
-                    state.ball.shadowScale = Math.max(0.2, 1 - (pt.z / 150));
-                    state.ball.shadowOpacity = Math.max(0, 1 - (pt.z / 150));
+                    state.ball.shadowScale = Math.max(0.2, 1 - (pt.z / 0.150));
+                    state.ball.shadowOpacity = Math.max(0, 1 - (pt.z / 0.150));
                 },
                 (sim) => {
                     self.activeSim = null;

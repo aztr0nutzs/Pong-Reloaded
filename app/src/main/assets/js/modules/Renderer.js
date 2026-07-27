@@ -13,6 +13,47 @@ class Renderer {
         return Renderer.shadowEl;
     }
 
+    static getWorldScreenTransform(renderBounds) {
+        var table = window.Physics.world.geometry.table;
+        var bounds = renderBounds || document.getElementById('table-surface').getBoundingClientRect();
+        return Object.freeze({
+            bounds: bounds,
+            worldWidth: table.width,
+            worldLength: table.length,
+            pixelsPerMeterX: bounds.width / table.width,
+            pixelsPerMeterY: bounds.height / table.length
+        });
+    }
+
+    static worldToScreen(point, renderBounds) {
+        var transform = Renderer.getWorldScreenTransform(renderBounds);
+        return {
+            x: transform.bounds.left + point.x * transform.pixelsPerMeterX,
+            y: transform.bounds.top + point.y * transform.pixelsPerMeterY - point.z * transform.pixelsPerMeterY
+        };
+    }
+
+    static screenToWorld(point, renderBounds) {
+        var transform = Renderer.getWorldScreenTransform(renderBounds);
+        return {
+            x: Renderer.stableWorldScalar(clamp((point.x - transform.bounds.left) / transform.pixelsPerMeterX, 0, transform.worldWidth)),
+            y: Renderer.stableWorldScalar(clamp((point.y - transform.bounds.top) / transform.pixelsPerMeterY, 0, transform.worldLength)),
+            z: 0
+        };
+    }
+
+    static screenPullToControl(pull, renderBounds) {
+        var transform = Renderer.getWorldScreenTransform(renderBounds);
+        var referencePixels = transform.bounds.height * 0.4;
+        return {
+            x: Renderer.stableWorldScalar(pull.x / referencePixels),
+            y: Renderer.stableWorldScalar(pull.y / referencePixels)
+        };
+    }
+
+    static stableWorldScalar(value) {
+        return Math.round(value * 1e12) / 1e12;
+    }
     static renderPreview(ctx, solution){
       if(!ctx) return;
       var w = ctx.canvas.width;
@@ -21,15 +62,16 @@ class Renderer {
       if(!solution) return;
       ShotSolution.assertValid(solution);
       
-      var bs = solution.launchPosition;
+      var bs = Renderer.worldToScreen(solution.launchPosition);
       var color = solution.predictedOutcome === 'hit' ? '#39ff8c' : (solution.grazedRim ? '#ffd23f' : '#00f3ff');
       
       // Draw target line
-      var last = solution.trajectorySamples[solution.trajectorySamples.length - 1];
-      var lx = last.x, ly = last.y - last.z*0.85;
+      var last = Renderer.worldToScreen(solution.landingPosition);
+      var lx = last.x, ly = last.y;
       
       ctx.beginPath();
-      ctx.moveTo(solution.targetWorldPosition.x, solution.targetWorldPosition.y);
+      var target = Renderer.worldToScreen(solution.targetWorldPosition);
+      ctx.moveTo(target.x, target.y);
       ctx.lineTo(lx, ly);
       ctx.strokeStyle = 'rgba(255, 46, 196, 0.4)';
       ctx.lineWidth = 1;
@@ -39,7 +81,9 @@ class Renderer {
       // Draw pull line
       ctx.beginPath();
       ctx.moveTo(bs.x, bs.y);
-      ctx.lineTo(bs.x + solution.inputPull.x, bs.y + solution.inputPull.y);
+      var transform = Renderer.getWorldScreenTransform();
+      var pullScale = transform.bounds.height * 0.4;
+      ctx.lineTo(bs.x + solution.inputPull.x * pullScale, bs.y + solution.inputPull.y * pullScale);
       ctx.strokeStyle = 'rgba(255, 46, 196, 0.85)';
       ctx.lineWidth = 3;
       ctx.setLineDash([6, 7]);
@@ -50,8 +94,8 @@ class Renderer {
       var step = Math.max(1, Math.floor(solution.trajectorySamples.length / 70));
       ctx.beginPath();
       for(var i=0; i<solution.trajectorySamples.length; i+=step){
-        var p = solution.trajectorySamples[i];
-        var px = p.x, py = p.y - p.z*0.85;
+        var p = Renderer.worldToScreen(solution.trajectorySamples[i]);
+        var px = p.x, py = p.y;
         if(i===0) ctx.moveTo(px, py);
         else ctx.lineTo(px, py);
       }
@@ -69,7 +113,8 @@ class Renderer {
       ctx.globalAlpha = 0.8;
       solution.bounceEvents.forEach(function(event){
         ctx.beginPath();
-        ctx.arc(event.x, event.y - event.z*0.85, 3, 0, Math.PI*2);
+        var point = Renderer.worldToScreen(event);
+        ctx.arc(point.x, point.y, 3, 0, Math.PI*2);
         ctx.fill();
       });
       
@@ -84,7 +129,8 @@ class Renderer {
       // Draw rim marker
       var rimSample = solution.firstRimSample;
       if(rimSample){
-        var rx = rimSample.x, ry = rimSample.y - rimSample.z*0.85;
+        var rimPoint = Renderer.worldToScreen(rimSample);
+        var rx = rimPoint.x, ry = rimPoint.y;
         ctx.beginPath();
         ctx.arc(rx, ry, 10, 0, Math.PI*2);
         ctx.strokeStyle = '#ffd23f';
@@ -143,10 +189,22 @@ class Renderer {
             let iy = (pt.prevY !== undefined) ? pt.prevY + (pt.y - pt.prevY) * a : pt.y;
             let iz = (pt.prevZ !== undefined) ? pt.prevZ + (pt.z - pt.prevZ) * a : pt.z;
             
-            let lift = iz * 0.85;
-            let br = window.Thrower ? window.Thrower.engine.BALL_R : 13;
-            let bx = ix - br;
-            let by = iy - br - lift;
+            let worldPoint = { x: ix, y: iy, z: iz + window.Physics.world.geometry.ball.radius };
+            let screenPoint = Renderer.worldToScreen(worldPoint);
+            let transform = Renderer.getWorldScreenTransform();
+            let br = window.Physics.world.geometry.ball.radius * transform.pixelsPerMeterX;
+            let diameter = br * 2;
+            if (Renderer.lastBallDiameter !== diameter) {
+                ball.style.width = diameter.toFixed(2) + 'px';
+                ball.style.height = diameter.toFixed(2) + 'px';
+                if (shadow) {
+                    shadow.style.width = (diameter * 0.85).toFixed(2) + 'px';
+                    shadow.style.height = (diameter * 0.27).toFixed(2) + 'px';
+                }
+                Renderer.lastBallDiameter = diameter;
+            }
+            let bx = screenPoint.x - br;
+            let by = screenPoint.y - br;
             let scaleDepth = pt.scaleDepth || 1;
             let shadowScale = pt.shadowScale || 1;
             let shadowOpacity = pt.shadowOpacity || 1;
@@ -157,8 +215,9 @@ class Renderer {
                 Renderer.lastBTransform = bTransform;
             }
             if (shadow) {
-                let sx = ix - (br * 0.85);
-                let sy = iy - (br * 0.27);
+                let groundPoint = Renderer.worldToScreen({ x: ix, y: iy, z: 0 });
+                let sx = groundPoint.x - (br * 0.85);
+                let sy = groundPoint.y - (br * 0.27);
                 let sTransform = 'translate3d(' + sx.toFixed(1) + 'px, ' + sy.toFixed(1) + 'px, 0) scale(' + (scaleDepth * shadowScale).toFixed(3) + ')';
                 if (Renderer.lastSTransform !== sTransform) {
                     shadow.style.transform = sTransform;
@@ -225,11 +284,6 @@ class Renderer {
     }
 
     static sizeAimSvg() {
-        qsa('.cup').forEach(function(c) {
-            delete c.dataset.cx;
-            delete c.dataset.cy;
-            delete c.dataset.cw;
-        });
         if(window.Aim && window.Aim.resizeCanvas) window.Aim.resizeCanvas();
     }
 }

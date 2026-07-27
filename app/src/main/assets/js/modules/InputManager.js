@@ -29,8 +29,7 @@ class InputManager {
         GameStateManager.state.aim.phase = 'target';
       }
       
-      this.MAX_PULL = 250;
-      this.MIN_PULL = 20;
+      this.MIN_PULL = 0.08;
 
       this._eventsBound = false;
       this._bindPointerEvents();
@@ -88,8 +87,8 @@ class InputManager {
         }
         if(!tr) return pt;
         return {
-            x: clamp(pt.x, tr.left + 20, tr.right - 20),
-            y: clamp(pt.y, tr.top + 20, tr.bottom - 40)
+            x: clamp(pt.x, tr.left, tr.right),
+            y: clamp(pt.y, tr.top, tr.bottom)
         };
     }
 
@@ -126,19 +125,20 @@ class InputManager {
       if (!this.current || !this.pullStart) return;
       pull.x = this.current.x - this.pullStart.x;
       pull.y = this.current.y - this.pullStart.y;
-      var valid = pull.y > this.MIN_PULL;
+      var controlPull = Renderer.screenPullToControl(pull);
+      var valid = controlPull.y > this.MIN_PULL;
       
-      var windAccel = { LOW: 0, MED: 36, HIGH: 82 }[(state && state.match) ? state.match.wind : 'LOW'] || 0;
-      var smoothedPull = window.Thrower ? window.Thrower.updateInput(pull) : pull;
+      var windAccel = { LOW: 0, MED: 0.036, HIGH: 0.082 }[(state && state.match) ? state.match.wind : 'LOW'] || 0;
+      var smoothedPull = window.Thrower ? window.Thrower.updateInput(controlPull) : controlPull;
+      var targetWorld = Renderer.screenToWorld(this.target);
       var sol = (valid && window.Thrower) ? window.Thrower.computeSolution(
-          smoothedPull, 
-          this.target, 
-          this.ballStart, 
-          this.cachedCupsEls, 
-          this.cachedTableRect, 
-          difficulty, 
-          windAccel, 
-          this.cachedAiCupsRect
+          smoothedPull,
+          targetWorld,
+          this.target,
+          this.ballStart,
+          this.cachedCupsEls,
+          difficulty,
+          windAccel
       ) : null;
       
       if(sol){
@@ -178,25 +178,10 @@ class InputManager {
         var tableEl = $('table-surface');
         if (!ballEl || !tableEl) return;
         
-        self.cachedBallRect = ballEl.getBoundingClientRect();
         self.cachedTableRect = tableEl.getBoundingClientRect();
-        let bw = self.cachedTableRect.width * 0.06557;
-        ballEl.style.width = bw + 'px';
-        ballEl.style.height = bw + 'px';
-        if ($('ball-shadow')) {
-            $('ball-shadow').style.width = (bw * 0.85) + 'px';
-            $('ball-shadow').style.height = (bw * 0.27) + 'px';
-        }
-        if (window.Thrower && window.Thrower.engine) {
-          window.Thrower.engine.BALL_R = bw / 2;
-          window.Thrower.engine.BALL_AREA = Math.PI * (bw/2) * (bw/2);
-        }
-        self.cachedBallRect = ballEl.getBoundingClientRect();
-        var aiCupsEl = $('ai-cups');
-        self.cachedAiCupsRect = aiCupsEl ? aiCupsEl.getBoundingClientRect() : null;
         self.cachedCupsEls = qsa('#ai-cups .cup:not(.hit)');
         
-        self.ballStart = { x: self.cachedBallRect.left + self.cachedBallRect.width/2, y: self.cachedBallRect.top + self.cachedBallRect.height/2, z: 6 };
+        self.ballStart = self.engine.world.launchPosition('player');
         
         if(self.phase === 'target'){
             self.startTarget = self.target || self.tableClampedPoint({x: e.clientX, y: e.clientY});
@@ -246,7 +231,7 @@ class InputManager {
         }
         pull.x = self.current.x - self.pullStart.x;
         pull.y = self.current.y - self.pullStart.y;
-        if(pull.y <= self.MIN_PULL){
+        if(Renderer.screenPullToControl(pull).y <= self.MIN_PULL){
           if (window.Thrower) window.Thrower.resetInput();
           self.reset();
           return;

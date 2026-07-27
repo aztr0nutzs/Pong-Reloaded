@@ -98,12 +98,12 @@ class TrajectoryPredictor {
      * 
      * @param {Object} init Initial physics state {x, y, z, vx, vy, vz, angularVelocityX, angularVelocityZ...}
      * @param {Array} cupEls Array of DOM cup elements
-     * @param {DOMRect} tableRect Table surface bounds
+     * @param {TableGeometry.bounds} tableGeometry Immutable world-space table bounds in meters
      * @param {string} difficulty Game difficulty
      * @param {number} windAccel Wind acceleration vector
      * @returns {Object} Comprehensive trajectory prediction result
      */
-    simulate(init, cupEls, tableRect, difficulty, windAccel) {
+    simulate(init, cupEls, tableGeometry, difficulty, windAccel) {
         let cups = this.engine.parseCups(cupEls, difficulty);
         let simState = this.engine.cloneState(init);
         
@@ -125,7 +125,7 @@ class TrajectoryPredictor {
         });
 
         for (let i = 0; i < maxSteps && !simState.settled; i++) {
-            this.engine.step(simState, this.engine.FIXED_DT, tableRect, cups, windAccel);
+            this.engine.step(simState, this.engine.FIXED_DT, tableGeometry, cups, windAccel);
 
             let speed = Math.sqrt(simState.vx**2 + simState.vy**2 + simState.vz**2);
             let sample = {
@@ -166,12 +166,12 @@ class TrajectoryPredictor {
             let hs = Math.sqrt(simState.vx**2 + simState.vy**2);
             if (simState.insideCup) {
                 let bFloorZ = simState.insideCup.colliders.bottomZ;
-                if (Math.abs(simState.vz) < 25 && simState.z <= bFloorZ + 3.0 && hs < this.engine.STOP_SPEED) {
+                if (Math.abs(simState.vz) < 0.025 && simState.z <= bFloorZ + 0.003 && hs < this.engine.STOP_SPEED) {
                     simState.settled = true;
                     simState.outcome = 'hit';
                     hitCupEl = simState.insideCup.el;
                 }
-            } else if (simState.z <= 0.5 && hs < this.engine.STOP_SPEED) {
+            } else if (simState.z <= 0.0005 && hs < this.engine.STOP_SPEED) {
                 simState.settled = true;
                 simState.outcome = simState.outcome || 'miss';
             }
