@@ -36,6 +36,7 @@ function runSchedule(frameCount, frameDelta) {
     initialState,
     [],
     engine.world.geometry.table.bounds,
+    'normal',
     0.036,
     null,
     null,

@@ -225,14 +225,12 @@ class ThrowController {
         }
         
         return new Promise(function(resolve) {
-            let cups = self.engine.parseCups(cupsEls, difficulty);
-            
             if (window.GameStateManager && window.GameStateManager.state) {
                 window.GameStateManager.state.ball.active = true;
             }
             
             self.activeSim = self.engine.startLiveSimulation(
-                initParams, cups, tableGeometry, windAccel,
+                initParams, cupsEls, tableGeometry, difficulty, windAccel,
                 (sim) => {
                     let state = window.GameStateManager ? window.GameStateManager.state : null;
                     if (!state) return;
@@ -278,6 +276,19 @@ class ThrowController {
         });
     }
 
+    playbackShot(solution) {
+        ShotSolution.assertValid(solution);
+        var context = solution.simulationContext;
+        return this.playback(
+            this.engine.stateFromShotSolution(solution),
+            solution.depthRange,
+            context.cupElements,
+            context.tableBounds,
+            context.difficulty,
+            context.windAcceleration
+        );
+    }
+
     /**
      * Authoritative execution of player throw lifecycle.
      */
@@ -296,19 +307,7 @@ class ThrowController {
             return;
         }
         
-        var context = sol.simulationContext;
-        var initialState = {
-            x: sol.launchPosition.x,
-            y: sol.launchPosition.y,
-            z: sol.launchPosition.z,
-            vx: sol.launchVelocity.x,
-            vy: sol.launchVelocity.y,
-            vz: sol.launchVelocity.z,
-            angularVelocityX: sol.angularVelocity.x,
-            angularVelocityY: sol.angularVelocity.y,
-            angularVelocityZ: sol.angularVelocity.z
-        };
-        this.playback(initialState, sol.depthRange, context.cupElements, context.tableBounds, context.difficulty, context.windAcceleration).then(function(liveSim) {
+        this.playbackShot(sol).then(function(liveSim) {
             var willHit = liveSim.outcome === 'hit' && !!liveSim.hitCupEl;
             var hitCupElement = willHit ? liveSim.hitCupEl : null;
             

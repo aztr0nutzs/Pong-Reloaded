@@ -207,7 +207,7 @@ class PhysicsEngine {
         for (let i = this.liveSimulations.length - 1; i >= 0; i--) {
             let sim = this.liveSimulations[i];
             if (!sim.settled) {
-                this.stepFixed(sim, sim.tableGeometry, sim.cups, sim.windAccel);
+                this.stepSimulation(sim);
                 if (sim.onUpdate) sim.onUpdate(sim);
                 if (sim.settled) {
                     if (sim.onComplete) sim.onComplete(sim);
@@ -217,16 +217,118 @@ class PhysicsEngine {
         }
     }
     
-    startLiveSimulation(state, cups, tableGeometry, windAccel, onUpdate, onComplete) {
-        let sim = Object.assign(this.createSimulationState(state), {
-            cups: cups,
-            tableGeometry: tableGeometry,
-            windAccel: windAccel,
+    startLiveSimulation(state, cupElements, tableGeometry, difficulty, windAccel, onUpdate, onComplete) {
+        let sim = Object.assign(this.createSimulation(state, cupElements, tableGeometry, difficulty, windAccel), {
             onUpdate: onUpdate,
             onComplete: onComplete,
         });
         this.liveSimulations.push(sim);
         return sim;
+    }
+
+    createSimulation(state, cupElements, tableGeometry, difficulty, windAccel) {
+        return Object.assign(this.createSimulationState(state), {
+            cups: this.parseCups(cupElements, difficulty),
+            cupElements: cupElements,
+            tableGeometry: tableGeometry,
+            difficulty: difficulty,
+            windAccel: windAccel,
+            stepCount: 0,
+            maxSteps: Math.round(5.0 / this.FIXED_DT)
+        });
+    }
+
+    stateFromShotSolution(solution) {
+        return {
+            x: solution.launchPosition.x,
+            y: solution.launchPosition.y,
+            z: solution.launchPosition.z,
+            vx: solution.launchVelocity.x,
+            vy: solution.launchVelocity.y,
+            vz: solution.launchVelocity.z,
+            angularVelocityX: solution.angularVelocity.x,
+            angularVelocityY: solution.angularVelocity.y,
+            angularVelocityZ: solution.angularVelocity.z
+        };
+    }
+
+    createSimulationFromShot(solution) {
+        var context = solution.simulationContext;
+        return this.createSimulation(this.stateFromShotSolution(solution), context.cupElements,
+            context.tableBounds, context.difficulty, context.windAcceleration);
+    }
+
+    stepSimulation(simulation) {
+        if (simulation.settled) return simulation;
+        this.stepFixed(simulation, simulation.tableGeometry, simulation.cups, simulation.windAccel);
+        simulation.stepCount++;
+        if (!simulation.settled && simulation.stepCount >= simulation.maxSteps) {
+            simulation.settled = true;
+            simulation.outcome = simulation.outcome || 'miss';
+            this.synchronizeStructuredState(simulation);
+        }
+        return simulation;
+    }
+
+    createSimulationTrace(simulation) {
+        var trace = { samples: [], bouncePoints: [], cupIntersections: [], maxImpactVelocity: 0 };
+        this.recordSimulationStep(trace, simulation, true);
+        return trace;
+    }
+
+    recordSimulationStep(trace, simulation, initial) {
+        var speed = Math.hypot(simulation.vx, simulation.vy, simulation.vz);
+        var event = initial ? null : simulation.event;
+        var sample = { x: simulation.x, y: simulation.y, z: Math.max(0, simulation.z), event: event, v: speed };
+        trace.samples.push(sample);
+        if (!event) return sample;
+
+        trace.maxImpactVelocity = Math.max(trace.maxImpactVelocity, speed);
+        if (event === 'bounce' || event === 'floor-bounce') {
+            trace.bouncePoints.push({ x: sample.x, y: sample.y, z: sample.z, event: event });
+        }
+        if (PhysicsEngine.CUP_EVENTS.includes(event)) {
+            trace.cupIntersections.push({
+                x: sample.x, y: sample.y, z: simulation.z, event: event,
+                cup: simulation.insideCup ? simulation.insideCup.el : null
+            });
+        }
+        return sample;
+    }
+
+    finishSimulationTrace(trace, simulation) {
+        return {
+            samples: trace.samples,
+            outcome: simulation.outcome || 'miss',
+            hitCupEl: simulation.hitCupEl,
+            finalX: simulation.x,
+            finalY: simulation.y,
+            finalZ: Math.max(0, simulation.z),
+            landingPoint: { x: simulation.x, y: simulation.y, z: Math.max(0, simulation.z) },
+            bouncePoints: trace.bouncePoints,
+            cupIntersections: trace.cupIntersections,
+            dt: this.FIXED_DT,
+            impactForce: (this.BALL_MASS * trace.maxImpactVelocity) / this.FIXED_DT,
+            impactVelocity: trace.maxImpactVelocity
+        };
+    }
+
+    simulate(state, cupElements, tableGeometry, difficulty, windAccel) {
+        var simulation = this.createSimulation(state, cupElements, tableGeometry, difficulty, windAccel);
+        return this.runSimulation(simulation);
+    }
+
+    simulateShot(solution) {
+        return this.runSimulation(this.createSimulationFromShot(solution));
+    }
+
+    runSimulation(simulation) {
+        var trace = this.createSimulationTrace(simulation);
+        while (!simulation.settled) {
+            this.stepSimulation(simulation);
+            this.recordSimulationStep(trace, simulation, false);
+        }
+        return this.finishSimulationTrace(trace, simulation);
     }
 
     cloneState(s) {
@@ -622,6 +724,7 @@ class PhysicsEngine {
         s.angularVelocityZ *= (1 - transferFactor);
     }
 }
+PhysicsEngine.CUP_EVENTS = Object.freeze(['rim', 'lip-in', 'lip-out', 'hard-rebound', 'interior-bounce', 'enter', 'soft-drop']);
 window.PhysicsConstants = PhysicsConstants;
 window.WorldGeometry = WorldGeometry;
 window.BallBody = BallBody;

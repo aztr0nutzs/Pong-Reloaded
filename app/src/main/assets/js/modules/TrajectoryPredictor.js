@@ -109,86 +109,12 @@ class TrajectoryPredictor {
      * @returns {Object} Comprehensive trajectory prediction result
      */
     simulate(init, cupEls, tableGeometry, difficulty, windAccel) {
-        let cups = this.engine.parseCups(cupEls, difficulty);
-        let simState = this.engine.cloneState(init);
-        
-        let maxSteps = Math.round(5.0 / this.engine.FIXED_DT); // Max 5 seconds simulation cutoff
-        let samples = [];
-        let bouncePoints = [];
-        let cupIntersections = [];
-        let maxImpactV = 0;
-        let hitCupEl = null;
+        return this.engine.simulate(init, cupEls, tableGeometry, difficulty, windAccel);
+    }
 
-        // Initial trajectory sample
-        let initialVel = Math.sqrt(simState.vx**2 + simState.vy**2 + simState.vz**2);
-        samples.push({
-            x: simState.x,
-            y: simState.y,
-            z: simState.z,
-            event: null,
-            v: initialVel
-        });
-
-        for (let i = 0; i < maxSteps && !simState.settled; i++) {
-            this.engine.stepFixed(simState, tableGeometry, cups, windAccel);
-
-            let speed = Math.sqrt(simState.vx**2 + simState.vy**2 + simState.vz**2);
-            let sample = {
-                x: simState.x,
-                y: simState.y,
-                z: Math.max(0, simState.z),
-                event: simState.event,
-                v: speed
-            };
-            samples.push(sample);
-
-            if (simState.event) {
-                maxImpactV = Math.max(maxImpactV, speed);
-
-                // Track bounce points
-                if (simState.event === 'bounce' || simState.event === 'floor-bounce') {
-                    bouncePoints.push({
-                        x: simState.x,
-                        y: simState.y,
-                        z: Math.max(0, simState.z),
-                        event: simState.event
-                    });
-                }
-
-                // Track cup interactions
-                if (['rim', 'lip-in', 'lip-out', 'hard-rebound', 'interior-bounce', 'enter', 'soft-drop'].includes(simState.event)) {
-                    cupIntersections.push({
-                        x: simState.x,
-                        y: simState.y,
-                        z: simState.z,
-                        event: simState.event,
-                        cup: simState.insideCup ? simState.insideCup.el : null
-                    });
-                }
-            }
-
-            if (simState.settled && simState.hitCupEl) hitCupEl = simState.hitCupEl;
-        }
-
-        if (!simState.settled) simState.outcome = simState.outcome || 'miss';
-
-        // Impact force in Newtons: F = (m * v) / dt
-        let impactForceN = (this.engine.BALL_MASS * maxImpactV) / this.engine.FIXED_DT;
-
-        return {
-            samples: samples,
-            outcome: simState.outcome,
-            hitCupEl: hitCupEl || simState.hitCupEl,
-            finalX: simState.x,
-            finalY: simState.y,
-            finalZ: Math.max(0, simState.z),
-            landingPoint: { x: simState.x, y: simState.y, z: Math.max(0, simState.z) },
-            bouncePoints: bouncePoints,
-            cupIntersections: cupIntersections,
-            dt: this.engine.FIXED_DT,
-            impactForce: impactForceN,
-            impactVelocity: maxImpactV
-        };
+    predictShot(solution) {
+        ShotSolution.assertValid(solution);
+        return this.engine.simulateShot(solution);
     }
 
     createShotSolution(data, prediction) {
@@ -227,7 +153,7 @@ class TrajectoryPredictor {
         if (!sim || !sim.samples) return false;
         for (let i = 0; i < sim.samples.length; i++) {
             let ev = sim.samples[i].event;
-            if (['rim', 'lip-in', 'lip-out', 'hard-rebound', 'interior-bounce', 'enter', 'soft-drop'].includes(ev)) {
+            if (PhysicsEngine.CUP_EVENTS.includes(ev)) {
                 return true;
             }
         }
@@ -238,7 +164,7 @@ class TrajectoryPredictor {
         if (!sim || !sim.samples) return null;
         for (let i = 0; i < sim.samples.length; i++) {
             let ev = sim.samples[i].event;
-            if (['rim', 'lip-in', 'lip-out', 'hard-rebound', 'interior-bounce', 'enter', 'soft-drop'].includes(ev)) {
+            if (PhysicsEngine.CUP_EVENTS.includes(ev)) {
                 return sim.samples[i];
             }
         }
