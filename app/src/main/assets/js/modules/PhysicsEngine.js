@@ -1,127 +1,214 @@
+class PhysicsConstants {
+    static SI = Object.freeze({
+        gravity: 9.80665,
+        airDensity: 1.225,
+        dragCoefficient: 0.47,
+        tableRestitution: 0.82,
+        rimRestitution: 0.68,
+        cupWallRestitution: 0.35,
+        cupFloorRestitution: 0.18,
+        slideFriction: 0.28,
+        rollFriction: 0.015,
+        spinDecay: 0.6,
+        magnusAccelerationFactor: 0.00012,
+        stopSpeed: 0.015,
+        fixedTimeStep: 1 / 120
+    });
+}
+
+class BallBody {
+    constructor() {
+        this.diameter = 0.040;
+        this.radius = this.diameter / 2;
+        this.mass = 0.0027;
+        this.crossSectionArea = Math.PI * this.radius * this.radius;
+        Object.freeze(this);
+    }
+}
+
+class CupGeometry {
+    constructor() {
+        this.height = 0.121;
+        this.outerTopRadius = 0.0475;
+        this.outerBottomRadius = 0.0285;
+        this.wallThickness = 0.002;
+        this.rimTubeRadius = 0.0015;
+        this.bottomHeight = 0.002;
+        this.centerSpacing = 0.100;
+        Object.freeze(this);
+    }
+}
+
+class TableGeometry {
+    constructor() {
+        this.width = 0.610;
+        this.length = 2.440;
+        this.surfaceHeight = 0;
+        this.groundHeight = -0.760;
+        this.bounds = Object.freeze({ left: 0, right: this.width, top: 0, bottom: this.length, width: this.width, height: this.length });
+        Object.freeze(this);
+    }
+}
+
+class WorldGeometry {
+    constructor() {
+        this.ball = new BallBody();
+        this.cup = new CupGeometry();
+        this.table = new TableGeometry();
+        Object.freeze(this);
+    }
+
+    cupPosition(team, index) {
+        var rows = team === 'ai' ? [4, 3, 2, 1] : [1, 2, 3, 4];
+        var cursor = 0;
+        for (var row = 0; row < rows.length; row++) {
+            var count = rows[row];
+            if (index < cursor + count) {
+                var column = index - cursor;
+                var x = this.table.width / 2 + (column - (count - 1) / 2) * this.cup.centerSpacing;
+                var aiY = 0.180 + row * this.cup.centerSpacing;
+                return Object.freeze({ x: x, y: team === 'ai' ? aiY : this.table.length - (0.480 - row * this.cup.centerSpacing), z: 0 });
+            }
+            cursor += count;
+        }
+        throw new RangeError('Invalid cup index: ' + index);
+    }
+}
+
+class PhysicsWorld {
+    constructor(geometry) {
+        this.geometry = geometry || new WorldGeometry();
+        this.fixedTimeStep = PhysicsConstants.SI.fixedTimeStep;
+        this.maxCatchUpSteps = 8;
+        this.maxFrameDelta = this.fixedTimeStep * this.maxCatchUpSteps;
+        this.accumulator = 0;
+        this.simulatedTime = 0;
+        this.droppedTime = 0;
+        this.lastStepCount = 0;
+    }
+
+    advanceFrame(elapsedSeconds, fixedStepCallback) {
+        var safeElapsed = Number.isFinite(elapsedSeconds) ? Math.max(0, elapsedSeconds) : 0;
+        var acceptedElapsed = Math.min(safeElapsed, this.maxFrameDelta);
+        this.droppedTime += safeElapsed - acceptedElapsed;
+        this.accumulator += acceptedElapsed;
+
+        var stepCount = Math.min(Math.floor(this.accumulator / this.fixedTimeStep), this.maxCatchUpSteps);
+        for (var step = 0; step < stepCount; step++) {
+            fixedStepCallback(this.fixedTimeStep);
+            this.accumulator -= this.fixedTimeStep;
+            this.simulatedTime += this.fixedTimeStep;
+        }
+
+        if (this.accumulator >= this.fixedTimeStep) {
+            var discarded = this.accumulator - (this.accumulator % this.fixedTimeStep);
+            this.accumulator -= discarded;
+            this.droppedTime += discarded;
+        }
+        this.lastStepCount = stepCount;
+        return Object.freeze({
+            stepCount: stepCount,
+            interpolationAlpha: this.accumulator / this.fixedTimeStep,
+            simulatedTime: this.simulatedTime,
+            droppedTime: this.droppedTime
+        });
+    }
+
+    resetClock() {
+        this.accumulator = 0;
+        this.simulatedTime = 0;
+        this.droppedTime = 0;
+        this.lastStepCount = 0;
+    }
+
+    launchPosition(team) {
+        return Object.freeze({
+            x: this.geometry.table.width / 2,
+            y: team === 'player' ? this.geometry.table.length - 0.080 : 0.080,
+            z: 0
+        });
+    }
+
+    createCupBodies(cupElements, difficulty) {
+        var cup = this.geometry.cup;
+        var radiusOffset = ({ easy: 0.004, normal: 0, hard: -0.002 })[difficulty] || 0;
+        return cupElements.map((element) => {
+            var team = element.dataset.team;
+            var position = this.geometry.cupPosition(team, Number(element.dataset.idx));
+            var outerTopRadius = cup.outerTopRadius + radiusOffset;
+            var innerTopRadius = outerTopRadius - cup.wallThickness;
+            var outerBottomRadius = cup.outerBottomRadius + radiusOffset;
+            var innerBottomRadius = outerBottomRadius - cup.wallThickness;
+            return Object.freeze({
+                el: element,
+                cx: position.x,
+                cy: position.y,
+                colliders: Object.freeze({
+                    rimCenterR: (outerTopRadius + innerTopRadius) / 2,
+                    rimTubeR: cup.rimTubeRadius,
+                    rimZ: cup.height,
+                    outerTopR: outerTopRadius,
+                    outerBottomR: outerBottomRadius,
+                    innerTopR: innerTopRadius,
+                    innerBottomR: innerBottomRadius,
+                    openingR: innerTopRadius,
+                    height: cup.height,
+                    bottomZ: cup.bottomHeight
+                })
+            });
+        });
+    }
+}
+
 class PhysicsEngine {
     constructor() {
-      // 1 mm = 1 unit. Standard ping pong ball: 40mm diameter (R=20mm, scaled in-game ~13-20mm). 
-      // Gravity = 6000 mm/s^2 (calibrated for responsive arcade-table feel)
-      this.GRAVITY = 6000; 
-      this.BALL_R = 13; 
-      this.AIR_DENSITY = 1.225e-9; // kg/mm^3
-      this.BALL_MASS = 0.0027; // kg (2.7 grams)
-      this.BALL_AREA = Math.PI * 13 * 13; // mm^2
-      this.DRAG_COEFF = 0.47; // Sphere drag coefficient
+      this.world = new PhysicsWorld();
+      var constants = PhysicsConstants.SI;
+      var ball = this.world.geometry.ball;
+      this.GRAVITY = constants.gravity;
+      this.BALL_R = ball.radius;
+      this.BALL_MASS = ball.mass;
+      this.BALL_AREA = ball.crossSectionArea;
+      this.AIR_DENSITY = constants.airDensity;
+      this.DRAG_COEFF = constants.dragCoefficient;
       
       // Coefficients of restitution (Energy loss upon impact)
-      this.TABLE_BOUNCE_E = 0.82; // Table surface bounce elasticity
-      this.RIM_BOUNCE_E = 0.68;   // Plastic rim torus bounce elasticity
-      this.CUP_WALL_E = 0.35;     // Plastic cup wall damping
-      this.CUP_FLOOR_E = 0.18;    // Beer liquid / interior floor heavy damping
+      this.TABLE_BOUNCE_E = constants.tableRestitution;
+      this.RIM_BOUNCE_E = constants.rimRestitution;
+      this.CUP_WALL_E = constants.cupWallRestitution;
+      this.CUP_FLOOR_E = constants.cupFloorRestitution;
       
       // Friction constants
-      this.SLIDE_FRICTION = 0.28; // Kinetic sliding friction coefficient
-      this.ROLL_FRICTION = 0.015; // Rolling resistance coefficient
-      this.SPIN_DECAY = 0.6;      // Angular velocity aerodynamic decay rate (rad/s^2)
+      this.SLIDE_FRICTION = constants.slideFriction;
+      this.ROLL_FRICTION = constants.rollFriction;
+      this.SPIN_DECAY = constants.spinDecay;
+      this.MAGNUS_ACCELERATION_FACTOR = constants.magnusAccelerationFactor;
 
-      this.STOP_SPEED = 15;       // Settlement threshold (mm/s)
-      this.FIXED_DT = 1 / 120;    // 120Hz fixed physics timestep
+      this.STOP_SPEED = constants.stopSpeed;
+      this.FIXED_DT = constants.fixedTimeStep;
       
       this.liveSimulations = [];
     }
     
     stop() {
         this.liveSimulations = [];
+        this.world.resetClock();
     }
     
     parseCups(cupEls, difficulty) {
-      var diffSizes = { easy: 4.0, normal: 0, hard: -2.0 };
-      var szOffset = diffSizes[difficulty] || 0;
-      
-      var cups = [];
-      for(var i=0; i<cupEls.length; i++){
-          var el = cupEls[i];
-          var cx = parseFloat(el.dataset.cx);
-          var cy = parseFloat(el.dataset.cy);
-          var w = parseFloat(el.dataset.cw);
-          
-          if (isNaN(cx) || isNaN(cy) || isNaN(w)) {
-              var rect = el.getBoundingClientRect();
-              cx = rect.left + rect.width / 2;
-              cy = rect.top + rect.height / 2;
-              w = rect.width;
-              el.dataset.cx = cx;
-              el.dataset.cy = cy;
-              el.dataset.cw = w;
-          }
-          
-          var outerTopR = (w / 2) + szOffset;
-          var innerTopR = Math.max(8, outerTopR - 2.0); // 2mm rim wall thickness
-          
-          var outerBottomR = (w * 0.36) + szOffset;
-          var innerBottomR = Math.max(5, outerBottomR - 2.0);
-          
-          var cupHeight = w * 1.25; // 3D cup height proportional to diameter
-          var rimTubeRadius = (outerTopR - innerTopR) / 2;
-          var rimCenterRadius = (outerTopR + innerTopR) / 2;
-          
-          cups.push({
-             el: el,
-             cx: cx,
-             cy: cy,
-             colliders: {
-                // 1. Rim collider (3D torus ring at top of cup)
-                rimCenterR: rimCenterRadius, 
-                rimTubeR: Math.max(1.5, rimTubeRadius), 
-                rimZ: cupHeight,
-
-                // 2. Outer wall frustum
-                outerTopR: outerTopR,
-                outerBottomR: outerBottomR,
-
-                // 3. Inner wall frustum
-                innerTopR: innerTopR,
-                innerBottomR: innerBottomR,
-
-                // 4. Opening (top aperture at cupHeight)
-                openingR: innerTopR,
-                height: cupHeight,
-
-                // 5. Interior & Bottom floor
-                bottomZ: 2.0 // 2mm interior floor offset above table surface
-             }
-          });
-      }
-      return cups;
+      return this.world.createCupBodies(cupEls, difficulty);
     }
     
-    /**
-     * Fixed physics update step driven by 120Hz accumulator loop.
-     * Guarantees frame-rate independent physics simulation.
-     */
-    fixedUpdate(dt) {
-        let stepDt = dt || this.FIXED_DT;
+    advanceFrame(elapsedSeconds) {
+        return this.world.advanceFrame(elapsedSeconds, () => this.stepLiveSimulations());
+    }
+
+    stepLiveSimulations() {
         for (let i = this.liveSimulations.length - 1; i >= 0; i--) {
             let sim = this.liveSimulations[i];
             if (!sim.settled) {
-                sim.prevX = sim.x;
-                sim.prevY = sim.y;
-                sim.prevZ = sim.z;
-                
-                this.step(sim, stepDt, sim.tableRect, sim.cups, sim.windAccel);
-                
+                this.stepFixed(sim, sim.tableGeometry, sim.cups, sim.windAccel);
                 if (sim.onUpdate) sim.onUpdate(sim);
-                
-                // Settlement check: deterministic rest condition
-                let hs = Math.sqrt(sim.vx*sim.vx + sim.vy*sim.vy);
-                if (sim.insideCup) {
-                    let bFloorZ = sim.insideCup.colliders.bottomZ;
-                    if (Math.abs(sim.vz) < 25 && sim.z <= bFloorZ + 3.0 && hs < this.STOP_SPEED) {
-                        sim.settled = true;
-                        sim.outcome = 'hit';
-                        sim.hitCupEl = sim.insideCup.el;
-                    }
-                } else if (sim.z <= 0.5 && hs < this.STOP_SPEED) {
-                    sim.settled = true;
-                    sim.outcome = sim.outcome || 'miss';
-                }
-                
                 if (sim.settled) {
                     if (sim.onComplete) sim.onComplete(sim);
                     this.liveSimulations.splice(i, 1);
@@ -130,30 +217,24 @@ class PhysicsEngine {
         }
     }
     
-    startLiveSimulation(state, cups, tableRect, windAccel, onUpdate, onComplete) {
-        let sim = {
-            ...state,
-            prevX: state.x,
-            prevY: state.y,
-            prevZ: state.z,
+    startLiveSimulation(state, cups, tableGeometry, windAccel, onUpdate, onComplete) {
+        let sim = Object.assign(this.createSimulationState(state), {
             cups: cups,
-            tableRect: tableRect,
+            tableGeometry: tableGeometry,
             windAccel: windAccel,
             onUpdate: onUpdate,
             onComplete: onComplete,
-            bounces: 0,
-            insideCup: null,
-            settled: false,
-            outcome: null,
-            hitCupEl: null,
-            event: null
-        };
+        });
         this.liveSimulations.push(sim);
         return sim;
     }
 
     cloneState(s) {
-        return {
+        return this.createSimulationState(s);
+    }
+
+    createSimulationState(s) {
+        var state = {
             x: s.x, y: s.y, z: s.z || 0,
             prevX: s.x, prevY: s.y, prevZ: s.z || 0,
             vx: s.vx, vy: s.vy, vz: s.vz,
@@ -165,19 +246,65 @@ class PhysicsEngine {
             settled: s.settled || false,
             outcome: s.outcome || null,
             hitCupEl: s.hitCupEl || null,
-            event: s.event || null
+            event: s.event || null,
+            orientation: {
+                x: s.orientation ? s.orientation.x : 0,
+                y: s.orientation ? s.orientation.y : 0,
+                z: s.orientation ? s.orientation.z : 0
+            },
+            airborne: true,
+            contactState: { type: 'none', cupElement: null },
+            activeContacts: []
         };
+        this.synchronizeStructuredState(state);
+        return state;
+    }
+
+    synchronizeStructuredState(s) {
+        s.position = { x: s.x, y: s.y, z: s.z };
+        s.previousPosition = { x: s.prevX, y: s.prevY, z: s.prevZ };
+        s.velocity = { x: s.vx, y: s.vy, z: s.vz };
+        s.angularVelocity = { x: s.angularVelocityX || 0, y: s.angularVelocityY || 0, z: s.angularVelocityZ || 0 };
+        s.airborne = s.z > this.world.geometry.table.surfaceHeight + 0.0005 && !s.insideCup;
+        var contactType = s.event || (s.insideCup ? 'cup-interior' : (s.airborne ? 'none' : 'table'));
+        s.contactState = { type: contactType, cupElement: s.insideCup ? s.insideCup.el : null };
+        s.activeContacts = contactType === 'none' ? [] : [s.contactState];
+    }
+
+    evaluateSettlement(s) {
+        let horizontalSpeed = Math.hypot(s.vx, s.vy);
+        if (s.insideCup) {
+            let bottom = s.insideCup.colliders.bottomZ;
+            if (Math.abs(s.vz) < 0.025 && s.z <= bottom + 0.003 && horizontalSpeed < this.STOP_SPEED) {
+                s.settled = true;
+                s.outcome = 'hit';
+                s.hitCupEl = s.insideCup.el;
+            }
+        } else if (s.z <= 0.0005 && horizontalSpeed < this.STOP_SPEED) {
+            s.settled = true;
+            s.outcome = s.outcome || 'miss';
+        }
     }
 
     /**
      * Advance simulation by dt using adaptive sub-stepping and Continuous Collision Detection (CCD).
      */
-    step(s, dt, tableRect, cups, windAccel) {
+    stepFixed(s, tableGeometry, cups, windAccel) {
+        s.prevX = s.x;
+        s.prevY = s.y;
+        s.prevZ = s.z;
+        this._integrateFixedInterval(s, tableGeometry, cups, windAccel);
+        this.evaluateSettlement(s);
+        this.synchronizeStructuredState(s);
+    }
+
+    _integrateFixedInterval(s, tableGeometry, cups, windAccel) {
+        let dt = this.FIXED_DT;
         let speed = Math.sqrt(s.vx*s.vx + s.vy*s.vy + s.vz*s.vz);
         // Adaptive sub-stepping based on current velocity to prevent tunneling
         let minSubsteps = 10;
         let maxSubsteps = 40;
-        let maxMovePerSubstep = Math.max(1.0, this.BALL_R * 0.4); // Max 5.2mm movement per substep
+        let maxMovePerSubstep = Math.max(0.001, this.BALL_R * 0.4); // Maximum one-millimeter movement floor per substep
         let requiredSubsteps = Math.ceil((speed * dt) / maxMovePerSubstep);
         let steps = Math.min(maxSubsteps, Math.max(minSubsteps, requiredSubsteps));
         
@@ -185,7 +312,7 @@ class PhysicsEngine {
         let stepEvent = null;
         
         for (let step = 1; step <= steps; step++) {
-            this.subStep(s, sub_dt, tableRect, cups, windAccel);
+            this.subStep(s, sub_dt, tableGeometry, cups, windAccel);
             if (s.event) stepEvent = s.event;
         }
         s.event = stepEvent;
@@ -194,7 +321,7 @@ class PhysicsEngine {
     /**
      * Single physics sub-step solver: Forces -> Position Update -> Continuous Collision Resolution.
      */
-    subStep(s, dt, tableRect, cups, windAccel) {
+    subStep(s, dt, tableGeometry, cups, windAccel) {
         // 1. Aerodynamic Forces & Spin (Drag + Magnus + Gravity + Wind)
         let vMag = Math.sqrt(s.vx*s.vx + s.vy*s.vy + s.vz*s.vz);
         if (vMag > 0.001) {
@@ -216,7 +343,7 @@ class PhysicsEngine {
             let cy = wz * s.vx - wx * s.vz;
             let cz = wx * s.vy - wy * s.vx;
             
-            let magnusCoeff = 0.00012;
+            let magnusCoeff = this.MAGNUS_ACCELERATION_FACTOR;
             s.vx += cx * magnusCoeff * dt;
             s.vy += cy * magnusCoeff * dt;
             s.vz += cz * magnusCoeff * dt;
@@ -237,6 +364,9 @@ class PhysicsEngine {
             s.angularVelocityY *= ratio;
             s.angularVelocityZ *= ratio;
         }
+        s.orientation.x += (s.angularVelocityX || 0) * dt;
+        s.orientation.y += (s.angularVelocityY || 0) * dt;
+        s.orientation.z += (s.angularVelocityZ || 0) * dt;
 
         s.event = null;
 
@@ -255,7 +385,7 @@ class PhysicsEngine {
             let dist2D = Math.sqrt(dx*dx + dy*dy);
             
             // Broadphase spatial culling
-            if (dist2D > c.outerTopR + this.BALL_R + 60) continue;
+            if (dist2D > c.outerTopR + this.BALL_R + 0.060) continue;
             
             let uX = dist2D > 0.0001 ? dx / dist2D : 1;
             let uY = dist2D > 0.0001 ? dy / dist2D : 0;
@@ -312,11 +442,11 @@ class PhysicsEngine {
             }
             
             // --- B. TOP APERTURE / CUP ENTRY ---
-            if (!s.insideCup && nextZ <= c.height && (nextZ - s.vz*dt) > c.height - 10) {
+            if (!s.insideCup && nextZ <= c.height && (nextZ - s.vz*dt) > c.height - 0.010) {
                 if (dist2D < c.openingR) {
                     s.insideCup = g;
                     let speed = Math.sqrt(s.vx*s.vx + s.vy*s.vy + s.vz*s.vz);
-                    s.event = (speed < 250 && dist2D < c.openingR * 0.6) ? 'soft-drop' : 'enter';
+                    s.event = (speed < 0.250 && dist2D < c.openingR * 0.6) ? 'soft-drop' : 'enter';
                 }
             }
             if (s.insideCup === g && nextZ > c.height) {
@@ -404,7 +534,7 @@ class PhysicsEngine {
                             s.vx -= (vtX/vtMag) * loss;
                             s.vy -= (vtY/vtMag) * loss;
                         }
-                        if (s.vz < 15) s.vz = 0;
+                        if (s.vz < 0.015) s.vz = 0;
                         s.event = 'floor-bounce';
                     }
                     nextZ = Math.max(nextZ, c.bottomZ);
@@ -414,11 +544,11 @@ class PhysicsEngine {
         
         // 4. Table Surface & Ground Collision Solver
         if (!s.insideCup) {
-            let tableHeight = 0;
-            let GROUND_Z = -500;
+            let tableHeight = this.world.geometry.table.surfaceHeight;
+            let GROUND_Z = this.world.geometry.table.groundHeight;
             
             if (nextZ <= tableHeight) {
-                if (tableRect && nextX >= tableRect.left && nextX <= tableRect.right && nextY >= tableRect.top && nextY <= tableRect.bottom) {
+                if (tableGeometry && nextX >= tableGeometry.left && nextX <= tableGeometry.right && nextY >= tableGeometry.top && nextY <= tableGeometry.bottom) {
                     if (s.vz < 0) {
                         s.bounces++;
                         s.vz = Math.abs(s.vz) * this.TABLE_BOUNCE_E;
@@ -438,7 +568,7 @@ class PhysicsEngine {
                             s.vy -= (vtY/vtMag) * totalLoss;
                         }
                         
-                        if (s.vz < 20) s.vz = 0;
+                        if (s.vz < 0.020) s.vz = 0;
                     }
                     nextZ = tableHeight;
                 } else if (nextZ <= GROUND_Z) {
@@ -449,11 +579,11 @@ class PhysicsEngine {
             }
             
             // Table Edge Bounds Solver
-            if(tableRect && nextZ >= tableHeight - 20 && nextZ <= tableHeight + 20){
-                if(nextX < tableRect.left + this.BALL_R){ nextX = tableRect.left + this.BALL_R; s.vx = Math.abs(s.vx) * 0.5; }
-                if(nextX > tableRect.right - this.BALL_R){ nextX = tableRect.right - this.BALL_R; s.vx = -Math.abs(s.vx) * 0.5; }
-                if(nextY < tableRect.top + this.BALL_R){ nextY = tableRect.top + this.BALL_R; s.vy = Math.abs(s.vy) * 0.5; }
-                if(nextY > tableRect.bottom - this.BALL_R){ nextY = tableRect.bottom - this.BALL_R; s.vy = -Math.abs(s.vy) * 0.5; }
+            if(tableGeometry && nextZ >= tableHeight - 0.020 && nextZ <= tableHeight + 0.020){
+                if(nextX < tableGeometry.left + this.BALL_R){ nextX = tableGeometry.left + this.BALL_R; s.vx = Math.abs(s.vx) * 0.5; }
+                if(nextX > tableGeometry.right - this.BALL_R){ nextX = tableGeometry.right - this.BALL_R; s.vx = -Math.abs(s.vx) * 0.5; }
+                if(nextY < tableGeometry.top + this.BALL_R){ nextY = tableGeometry.top + this.BALL_R; s.vy = Math.abs(s.vy) * 0.5; }
+                if(nextY > tableGeometry.bottom - this.BALL_R){ nextY = tableGeometry.bottom - this.BALL_R; s.vy = -Math.abs(s.vy) * 0.5; }
             }
         }
         
@@ -492,4 +622,10 @@ class PhysicsEngine {
         s.angularVelocityZ *= (1 - transferFactor);
     }
 }
+window.PhysicsConstants = PhysicsConstants;
+window.WorldGeometry = WorldGeometry;
+window.BallBody = BallBody;
+window.CupGeometry = CupGeometry;
+window.TableGeometry = TableGeometry;
+window.PhysicsWorld = PhysicsWorld;
 window.PhysicsEngine = PhysicsEngine;

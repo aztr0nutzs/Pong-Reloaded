@@ -2,21 +2,25 @@ class BallController {
     
     static resetBallPosition(fromTeam) {
         if (!window.GameStateManager) return;
-        var laneEl = fromTeam === 'player' ? document.getElementById('player-cups') : document.getElementById('ai-cups');
-        if (!laneEl) return;
-        var rect = laneEl.getBoundingClientRect();
-        
-        var x = rect.left + rect.width/2;
-        var y = fromTeam === 'player' ? (rect.bottom - 10) : (rect.top - 10);
+        if (!window.Physics || !window.Physics.world) return;
+        var position = window.Physics.world.launchPosition(fromTeam);
         
         let state = GameStateManager.getState();
         state.ball.active = true;
-        state.ball.prevX = x;
-        state.ball.prevY = y;
-        state.ball.prevZ = 0;
-        state.ball.x = x;
-        state.ball.y = y;
-        state.ball.z = 0;
+        state.ball.prevX = position.x;
+        state.ball.prevY = position.y;
+        state.ball.prevZ = position.z;
+        state.ball.x = position.x;
+        state.ball.y = position.y;
+        state.ball.z = position.z;
+        state.ball.position = { x: position.x, y: position.y, z: position.z };
+        state.ball.previousPosition = { x: position.x, y: position.y, z: position.z };
+        state.ball.velocity = { x: 0, y: 0, z: 0 };
+        state.ball.angularVelocity = { x: 0, y: 0, z: 0 };
+        state.ball.orientation = { x: 0, y: 0, z: 0 };
+        state.ball.airborne = false;
+        state.ball.contactState = { type: 'table', cupElement: null };
+        state.ball.activeContacts = [state.ball.contactState];
         state.ball.scaleDepth = 1;
         state.ball.shadowScale = 1;
         state.ball.shadowOpacity = 1;
