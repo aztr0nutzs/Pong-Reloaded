@@ -9,7 +9,6 @@
     <attribution android:tag="default_tag" android:label="@string/app_name" />
     <application
         android:resizeableActivity="true"
-        android:maxAspectRatio="3.0"
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
