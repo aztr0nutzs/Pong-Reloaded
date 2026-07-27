@@ -54,7 +54,6 @@ class Renderer {
     static stableWorldScalar(value) {
         return Math.round(value * 1e12) / 1e12;
     }
-
     static renderPreview(ctx, solution){
       if(!ctx) return;
       var w = ctx.canvas.width;
