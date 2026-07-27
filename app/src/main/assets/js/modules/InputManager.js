@@ -22,6 +22,7 @@ class InputManager {
       this.current = null;
       this.target = null;
       this.startTarget = null;
+      this.currentShotSolution = null;
       if (window.Thrower) window.Thrower.resetInput();
       this.phase = 'target';
       if (window.GameStateManager && GameStateManager.state && GameStateManager.state.aim) {
@@ -68,10 +69,11 @@ class InputManager {
         GameStateManager.state.aim.powerPct = 0;
         GameStateManager.state.aim.statsHudData = { show: false };
         GameStateManager.state.aim.crosshair.show = false;
-        GameStateManager.state.aim.preview = null;
+        GameStateManager.state.aim.shotSolution = null;
         this.phase = 'target';
         GameStateManager.state.aim.phase = 'target';
         this.target = null;
+        this.currentShotSolution = null;
         GameStateManager.state.aim.hintOpacity = '1';
         GameStateManager.state.aim.hintText = 'Drag to place your crosshair target';
       }
@@ -95,10 +97,10 @@ class InputManager {
       if (window.GameStateManager && GameStateManager.state && GameStateManager.state.aim) {
         GameStateManager.state.aim.statsHudData = {
             show: true,
-            spinPct: Math.round(sol.spinFactor * 100),
+            spinPct: Math.round(sol.spin * 100),
             relPct: Math.round(sol.releaseQuality * 100),
-            arcPct: Math.round(sol.arcFactor * 100),
-            outcome: sol.outcome
+            arcPct: Math.round(sol.arc * 100),
+            outcome: sol.predictedOutcome
         };
       }
     }
@@ -140,18 +142,19 @@ class InputManager {
       ) : null;
       
       if(sol){
+        ShotSolution.assertValid(sol);
+        this.currentShotSolution = sol;
         if (window.GameStateManager && GameStateManager.state && GameStateManager.state.aim) {
-          GameStateManager.state.aim.preview = sol.previewPoints;
-          GameStateManager.state.aim.targetCup = sol.targetCupIndex;
-          GameStateManager.state.aim.powerPct = sol.powerPct;
+          GameStateManager.state.aim.shotSolution = sol;
+          GameStateManager.state.aim.powerPct = Math.round(clamp(sol.power, 0, 1) * 100);
         }
         this.updateStatsHud(sol);
       } else {
         if (window.GameStateManager && GameStateManager.state && GameStateManager.state.aim) {
           GameStateManager.state.aim.crosshair.show = false;
-          GameStateManager.state.aim.preview = null;
+          GameStateManager.state.aim.shotSolution = null;
           GameStateManager.state.aim.powerPct = 0;
-          GameStateManager.state.aim.targetCup = null;
+          this.currentShotSolution = null;
           GameStateManager.state.aim.hintOpacity = '1';
           GameStateManager.state.aim.hintText = 'Pull back to aim and throw';
         }
@@ -249,19 +252,8 @@ class InputManager {
           return;
         }
         
-        var difficulty = (state && state.settings) ? (state.settings.difficulty || 'normal') : 'normal';
-        var windAccel = { LOW: 0, MED: 36, HIGH: 82 }[(state && state.match) ? state.match.wind : 'LOW'] || 0;
-        var smoothedPull = window.Thrower ? window.Thrower.updateInput(pull) : pull;
-        var sol = window.Thrower ? window.Thrower.computeSolution(
-            smoothedPull, 
-            self.target, 
-            self.ballStart, 
-            self.cachedCupsEls, 
-            self.cachedTableRect, 
-            difficulty, 
-            windAccel, 
-            self.cachedAiCupsRect
-        ) : null;
+        var sol = self.currentShotSolution;
+        if (sol) ShotSolution.assertValid(sol);
         if (window.Thrower) window.Thrower.resetInput();
         self.reset();
         
