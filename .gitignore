@@ -1,0 +1,22 @@
+# Gradle and Android build output
+.gradle/
+build/
+**/build/
+local.properties
+
+# IDE metadata
+.idea/
+*.iml
+
+# Local secrets and signing material
+.env
+*.jks
+*.keystore
+
+# Node dependencies and debug output
+node_modules/
+npm-debug.log*
+
+# OS metadata
+.DS_Store
+Thumbs.db
