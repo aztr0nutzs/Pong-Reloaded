@@ -1,5 +1,12 @@
 {
   "dependencies": {
     "jsdom": "^29.1.1"
+  },
+  "scripts": {
+    "test:physics": "node app/src/test/js/physics-world.test.js",
+    "test:simulation": "node app/src/test/js/fixed-timestep.test.js",
+    "test:throw": "node app/src/test/js/throw-solver.test.js",
+    "test:parity": "node app/src/test/js/prediction-live-parity.test.js",
+    "test": "npm run test:physics && npm run test:simulation && npm run test:throw && npm run test:parity"
   }
 }

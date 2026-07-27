@@ -244,30 +244,15 @@ function runBoot(){
     requestAnimationFrame(bootLoop);
 }
 
-let accumulator = 0;
 let lastTime = 0;
-const FIXED_PHYSICS_DT = 1 / 120; // 120Hz fixed physics step
 
 function mainGameLoop(ts) {
     if (!lastTime) lastTime = ts;
     let frameTime = (ts - lastTime) / 1000;
     lastTime = ts;
-    if (frameTime > 0.1) frameTime = 0.1; // clamp lag spikes
-    
-    accumulator += frameTime;
-    
-    // Fixed physics updates execute independently
-    while (accumulator >= FIXED_PHYSICS_DT) {
-        if (window.GameStateManager) {
-            GameStateManager.fixedUpdate(FIXED_PHYSICS_DT);
-        }
-        accumulator -= FIXED_PHYSICS_DT;
-    }
-    
-    let alpha = accumulator / FIXED_PHYSICS_DT;
+    let alpha = window.GameStateManager ? GameStateManager.advanceSimulation(frameTime) : 0;
     
     if (window.GameStateManager) {
-        GameStateManager.update(frameTime);
         if (window.Renderer) {
             Renderer.render(GameStateManager.getState(), alpha);
         }
