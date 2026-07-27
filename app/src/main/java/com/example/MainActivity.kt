@@ -1,7 +1,11 @@
 package com.example
 
 import android.annotation.SuppressLint
+import android.graphics.Color
+import android.os.Build
 import android.os.Bundle
+import android.view.View
+import android.view.WindowManager
 import android.webkit.WebChromeClient
 import android.webkit.WebSettings
 import android.webkit.WebView
@@ -21,15 +25,36 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        configureFullscreenWindow()
+        setContent {
+            GameWebView()
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        configureFullscreenWindow()
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) configureFullscreenWindow()
+    }
+
+    private fun configureFullscreenWindow() {
         val windowInsetsController = WindowCompat.getInsetsController(window, window.decorView)
         windowInsetsController.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         windowInsetsController.hide(WindowInsetsCompat.Type.systemBars())
-        
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
-            window.attributes = window.attributes.apply { layoutInDisplayCutoutMode = android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES }
-        }
-        setContent {
-            GameWebView()
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            window.attributes = window.attributes.apply {
+                layoutInDisplayCutoutMode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+                } else {
+                    WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+                }
+            }
         }
     }
 }
@@ -58,6 +83,7 @@ fun GameWebView() {
                 settings.useWideViewPort = false
                 settings.loadWithOverviewMode = false
                 settings.cacheMode = WebSettings.LOAD_NO_CACHE
+                overScrollMode = View.OVER_SCROLL_NEVER
                 
                 webViewClient = WebViewClient()
                 webChromeClient = object : WebChromeClient() {
@@ -73,7 +99,7 @@ fun GameWebView() {
                 }
                 
                 // Set a dark background before loading
-                setBackgroundColor(android.graphics.Color.BLACK)
+                setBackgroundColor(Color.BLACK)
                 
                 loadUrl("file:///android_asset/index.html")
             }
