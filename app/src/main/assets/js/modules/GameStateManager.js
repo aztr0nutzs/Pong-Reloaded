@@ -22,7 +22,9 @@ class GameStateManager {
       aim: {
         phase: 'none',
         crosshair: { x: 0, y: 0, show: false, locked: false },
-        preview: null
+        shotSolution: null,
+        powerPct: 0,
+        statsHudData: { show: false }
       },
       particleSystems: []
     };

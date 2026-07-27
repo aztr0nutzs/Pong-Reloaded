@@ -17,10 +17,8 @@ class ThrowController {
         // Active simulation cancellation reference
         this.activeSim = null;
         
-        // Caching structures for memory optimization during drag frames
+        // Cached throw parameters avoid transient allocations during drag frames.
         this.cachedParams = {};
-        this.cachedInit = {};
-        this.cachedSol = { finalTarget: {}, depthRef: {} };
     }
 
     /**
@@ -125,8 +123,8 @@ class ThrowController {
         this.cachedParams.angularVelocityY = 0;
         this.cachedParams.angularVelocityZ = angularZ;
         this.cachedParams.power = power;
-        this.cachedParams.arcFactor = vertRatio;
-        this.cachedParams.spinFactor = spinRatio;
+        this.cachedParams.arc = vertRatio;
+        this.cachedParams.spin = spinRatio;
         this.cachedParams.rawPower = rawPower;
         
         return this.cachedParams;
@@ -163,43 +161,66 @@ class ThrowController {
      */
     computeSolution(pull, target, ballStart, cupsEls, tableRect, difficulty, windAccel, aiCupsRect) {
         var params = this.computeThrowParams(pull, target, ballStart);
-        
-        this.cachedInit.x = ballStart.x;
-        this.cachedInit.y = ballStart.y;
-        this.cachedInit.z = ballStart.z;
-        this.cachedInit.vx = params.vx;
-        this.cachedInit.vy = params.vy;
-        this.cachedInit.vz = params.vz;
-        this.cachedInit.angularVelocityX = params.angularVelocityX;
-        this.cachedInit.angularVelocityY = params.angularVelocityY || 0;
-        this.cachedInit.angularVelocityZ = params.angularVelocityZ;
-        
-        var sim = this.predictor.simulate(this.cachedInit, cupsEls, tableRect, difficulty, windAccel);
-        var last = sim.samples[sim.samples.length - 1] || { x: ballStart.x, y: ballStart.y, z: 0 };
-        
+        var launchPosition = { x: ballStart.x, y: ballStart.y, z: ballStart.z };
+        var launchVelocity = { x: params.vx, y: params.vy, z: params.vz };
+        var angularVelocity = { x: params.angularVelocityX, y: params.angularVelocityY || 0, z: params.angularVelocityZ };
+        var initialState = {
+            x: launchPosition.x,
+            y: launchPosition.y,
+            z: launchPosition.z,
+            vx: launchVelocity.x,
+            vy: launchVelocity.y,
+            vz: launchVelocity.z,
+            angularVelocityX: angularVelocity.x,
+            angularVelocityY: angularVelocity.y,
+            angularVelocityZ: angularVelocity.z
+        };
+        var sim = this.predictor.simulate(initialState, cupsEls, tableRect, difficulty, windAccel);
         var releaseQuality = clamp(1 - (params.rawPower > 1.1 ? (params.rawPower - 1.1) * 2 : 0), 0, 1);
-        
-        this.cachedSol.ballStart = ballStart;
-        this.cachedSol.power = params.power;
-        this.cachedSol.arcFactor = params.arcFactor;
-        this.cachedSol.spinFactor = params.spinFactor;
-        this.cachedSol.samples = sim.samples;
-        this.cachedSol.outcome = sim.outcome;
-        this.cachedSol.hitCupEl = sim.hitCupEl;
-        this.cachedSol.finalTarget.x = last.x;
-        this.cachedSol.finalTarget.y = last.y;
-        this.cachedSol.initParams = { ...this.cachedInit };
-        this.cachedSol.cupsEls = cupsEls;
-        this.cachedSol.tableRect = tableRect;
-        this.cachedSol.difficulty = difficulty;
-        this.cachedSol.windAccel = windAccel;
-        this.cachedSol.releaseQuality = releaseQuality;
-        this.cachedSol.depthRef.startY = ballStart.y;
-        this.cachedSol.depthRef.endY = aiCupsRect ? (aiCupsRect.top + aiCupsRect.height / 2) : ballStart.y;
-        this.cachedSol.grazedRim = this.predictor.grazedRim(sim);
-        this.cachedSol.firstRimSample = this.predictor.firstRimSample(sim);
-        
-        return this.cachedSol;
+
+        return this.predictor.createShotSolution({
+            launchPosition: launchPosition,
+            launchVelocity: launchVelocity,
+            angularVelocity: angularVelocity,
+            targetWorldPosition: { x: target.x, y: target.y, z: 0 },
+            requestedTarget: { x: target.x, y: target.y, cupElement: this.findTargetCup(target, cupsEls) },
+            inputPull: { x: pull.x, y: pull.y },
+            power: params.power,
+            arc: params.arc,
+            spin: params.spin,
+            releaseQuality: releaseQuality,
+            depthRange: { startY: ballStart.y, endY: aiCupsRect ? (aiCupsRect.top + aiCupsRect.height / 2) : ballStart.y },
+            simulationContext: {
+                cupElements: cupsEls,
+                tableBounds: {
+                    left: tableRect.left,
+                    right: tableRect.right,
+                    top: tableRect.top,
+                    bottom: tableRect.bottom,
+                    width: tableRect.width,
+                    height: tableRect.height
+                },
+                difficulty: difficulty,
+                windAcceleration: windAccel,
+                timeStep: this.engine.FIXED_DT
+            }
+        }, sim);
+    }
+
+    findTargetCup(target, cupElements) {
+        var closestCup = null;
+        var closestDistance = Infinity;
+        cupElements.forEach(function(cupElement) {
+            var rect = cupElement.getBoundingClientRect();
+            var centerX = rect.left + rect.width / 2;
+            var centerY = rect.top + rect.height / 2;
+            var distance = Math.hypot(target.x - centerX, target.y - centerY);
+            if (distance < closestDistance) {
+                closestDistance = distance;
+                closestCup = cupElement;
+            }
+        });
+        return closestCup;
     }
 
     /**
@@ -262,6 +283,7 @@ class ThrowController {
      * Authoritative execution of player throw lifecycle.
      */
     performPlayerThrow(sol) {
+        ShotSolution.assertValid(sol);
         var m = window.state ? window.state.match : null;
         if (!m || !m.active) return;
         
@@ -275,14 +297,25 @@ class ThrowController {
             return;
         }
         
-        var self = this;
-        this.playback(sol.initParams, this.engine.DT, sol.depthRef, sol.cupsEls, sol.tableRect, sol.difficulty, sol.windAccel).then(function(liveSim) {
+        var context = sol.simulationContext;
+        var initialState = {
+            x: sol.launchPosition.x,
+            y: sol.launchPosition.y,
+            z: sol.launchPosition.z,
+            vx: sol.launchVelocity.x,
+            vy: sol.launchVelocity.y,
+            vz: sol.launchVelocity.z,
+            angularVelocityX: sol.angularVelocity.x,
+            angularVelocityY: sol.angularVelocity.y,
+            angularVelocityZ: sol.angularVelocity.z
+        };
+        this.playback(initialState, context.timeStep, sol.depthRange, context.cupElements, context.tableBounds, context.difficulty, context.windAcceleration).then(function(liveSim) {
             var willHit = liveSim.outcome === 'hit' && !!liveSim.hitCupEl;
-            if (willHit) sol.hitCupEl = liveSim.hitCupEl;
+            var hitCupElement = willHit ? liveSim.hitCupEl : null;
             
             if (willHit) {
                 m.hits++;
-                sol.hitCupEl.classList.add('hit');
+                hitCupElement.classList.add('hit');
                 m.aiRemaining--;
                 m.trickMeter = clamp(m.trickMeter + 16, 0, 100);
                 
