@@ -8,6 +8,7 @@
     "test:throw": "node app/src/test/js/throw-solver.test.js",
     "test:parity": "node app/src/test/js/prediction-live-parity.test.js",
     "test:state": "node app/src/test/js/game-state-manager.test.js",
-    "test": "npm run test:state && npm run test:physics && npm run test:simulation && npm run test:throw && npm run test:parity"
+    "test:ai": "node app/src/test/js/ai-determinism.test.js",
+    "test": "npm run test:state && npm run test:ai && npm run test:physics && npm run test:simulation && npm run test:throw && npm run test:parity"
   }
 }

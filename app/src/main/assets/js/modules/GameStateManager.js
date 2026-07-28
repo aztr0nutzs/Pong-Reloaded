@@ -63,7 +63,17 @@ class GameStateManager {
         return GameStateManager.lifecycle;
     }
 
-    static createMatch(mode, opponent) {
+    static seedFrom(value) {
+        var text = String(value);
+        var hash = 2166136261;
+        for (var index = 0; index < text.length; index++) {
+            hash ^= text.charCodeAt(index);
+            hash = Math.imul(hash, 16777619);
+        }
+        return hash >>> 0 || 1;
+    }
+
+    static createMatch(mode, opponent, seed) {
         return {
           mode: mode,
           opponent: opponent,
@@ -89,6 +99,9 @@ class GameStateManager {
           hits: 0,
           accuracy: 0,
           result: null,
+          seed: seed === undefined ? GameStateManager.seedFrom(mode + '|' + opponent + '|' + GameStateManager.generation) :
+            (Number.isFinite(seed) ? (seed >>> 0 || 1) : GameStateManager.seedFrom(seed)),
+          aiDecisionIndex: 0,
           generation: GameStateManager.generation,
           scoredCups: { player: Object.create(null), ai: Object.create(null) },
           timerHandle: null,
@@ -96,10 +109,10 @@ class GameStateManager {
         };
     }
 
-    static beginMatch(mode, opponent) {
+    static beginMatch(mode, opponent, seed) {
         GameStateManager.shutdownMatch(false);
         GameStateManager.generation++;
-        GameStateManager.state.match = GameStateManager.createMatch(mode, opponent);
+        GameStateManager.state.match = GameStateManager.createMatch(mode, opponent, seed);
         GameStateManager.lifecycle = GameStateManager.STATES.MATCH_INITIALIZING;
         GameStateManager.clearPrediction();
         return GameStateManager.state.match;
@@ -171,6 +184,11 @@ class GameStateManager {
         return m.generation;
     }
 
+    static consumeAiDecisionIndex() {
+        var m = GameStateManager.state.match;
+        if (!m || m.activeThrow !== 'ai' || GameStateManager.lifecycle !== GameStateManager.STATES.BALL_ACTIVE) return null;
+        return m.aiDecisionIndex++;
+    }
     static resolveThrow(side, hit, cupKey) {
         var m = GameStateManager.state.match;
         if (!m || m.activeThrow !== side || GameStateManager.lifecycle !== GameStateManager.STATES.BALL_ACTIVE ||
