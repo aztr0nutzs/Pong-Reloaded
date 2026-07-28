@@ -5,16 +5,20 @@ class ThrowController {
         
         // Configuration constants
         this.MIN_PULL = 0.08;
-        this.DEFAULT_ARC = 0.55;
-        this.SPIN_RATE = 4.0;
-        this.MIN_VERTICAL_SPEED = 1.20;
-        this.MAX_VERTICAL_SPEED = 3.80;
-        this.MIN_HORIZONTAL_SPEED = 0.80;
-        this.MAX_HORIZONTAL_SPEED = 12.00;
+        this.DEFAULT_ARC = 0.52;
+        this.POWER_CURVE_EXPONENT = 1.25;
+        this.SPIN_RATE = 12.0;
+        this.MIN_VERTICAL_SPEED = 1.35;
+        this.MAX_VERTICAL_SPEED = 3.35;
+        this.MIN_HORIZONTAL_SPEED = 0.90;
+        this.MAX_HORIZONTAL_SPEED = 10.50;
+        this.POWER_ENVELOPE_BASE = 0.55;
+        this.POWER_ENVELOPE_SCALE = 1.35;
+        this.HEADING_ENVELOPE = 0.14;
         this.SOLVER_TOLERANCE = 0.005;
         this.COARSE_SPEED_STEPS = 7;
         this.COARSE_HEADING_STEPS = 5;
-        this.REFINEMENT_PASSES = 3;
+        this.REFINEMENT_PASSES = 4;
         
         // Active simulation cancellation reference
         this.activeSim = null;
@@ -43,7 +47,7 @@ class ThrowController {
     getPowerCurve(rawPower) {
         var clamped = clamp(rawPower, 0, 1.2);
         // Power curve mapping: high precision near aim target with authoritative max reach
-        return Math.pow(clamped, 1.15);
+        return Math.pow(clamped, this.POWER_CURVE_EXPONENT);
     }
 
     finalizePlayerControls(pull, targetWorldPosition, requestedTarget, arcPreference) {
@@ -99,10 +103,10 @@ class ThrowController {
         var target = controls.targetWorldPosition;
         var baseHeading = Math.atan2(target.y - ballStart.y, target.x - ballStart.x);
         var powerCenter = this.MIN_HORIZONTAL_SPEED + controls.power * (this.MAX_HORIZONTAL_SPEED - this.MIN_HORIZONTAL_SPEED);
-        var envelopeHalfWidth = 0.75 + controls.power * 2.25;
+        var envelopeHalfWidth = this.POWER_ENVELOPE_BASE + controls.power * this.POWER_ENVELOPE_SCALE;
         var minimumSpeed = Math.max(this.MIN_HORIZONTAL_SPEED, powerCenter - envelopeHalfWidth);
         var maximumSpeed = Math.min(this.MAX_HORIZONTAL_SPEED, powerCenter + envelopeHalfWidth);
-        var headingHalfWidth = 0.20;
+        var headingHalfWidth = this.HEADING_ENVELOPE;
         var best = null;
         var evaluations = 0;
 
@@ -225,10 +229,6 @@ class ThrowController {
         }
         
         return new Promise(function(resolve) {
-            if (window.GameStateManager && window.GameStateManager.state) {
-                window.GameStateManager.state.ball.active = true;
-            }
-            
             self.activeSim = self.engine.startLiveSimulation(
                 initParams, cupsEls, tableGeometry, difficulty, windAccel,
                 (sim) => {
@@ -295,27 +295,24 @@ class ThrowController {
     performPlayerThrow(sol) {
         ShotSolution.assertValid(sol);
         var m = window.state ? window.state.match : null;
-        if (!m || !m.active) return;
-        
-        m.busy = true;
-        m.attempts++;
+        var generation = window.GameStateManager ? GameStateManager.claimPlayerThrow() : null;
+        if (!m || generation === null) return false;
         
         var remainingCups = qsa('#ai-cups .cup:not(.hit)');
         if (!remainingCups.length) {
             if (window.finishMatch) finishMatch('win');
-            m.busy = false;
-            return;
+            return true;
         }
         
         this.playbackShot(sol).then(function(liveSim) {
+            if (!GameStateManager.isCurrent(generation)) return;
             var willHit = liveSim.outcome === 'hit' && !!liveSim.hitCupEl;
             var hitCupElement = willHit ? liveSim.hitCupEl : null;
+            var cupKey = hitCupElement ? hitCupElement.dataset.idx : null;
+            var scored = GameStateManager.resolveThrow('player', willHit, cupKey);
             
-            if (willHit) {
-                m.hits++;
+            if (scored) {
                 hitCupElement.classList.add('hit');
-                m.aiRemaining--;
-                m.trickMeter = clamp(m.trickMeter + 16, 0, 100);
                 
                 if (window.SFX) SFX.hit();
                 if (window.UIRenderer) UIRenderer.toast('CUP DESTROYED');
@@ -330,16 +327,15 @@ class ThrowController {
             
             if (m.aiRemaining <= 0) {
                 if (window.finishMatch) finishMatch('win');
-                m.busy = false;
                 return;
             }
             
-            m.turn = 'ai';
-            m.busy = false;
-            setTimeout(function() {
+            GameStateManager.advanceTurn('player');
+            GameStateManager.schedule(function() {
                 if (window.AI) window.AI.performAiThrow();
-            }, 900);
+            }, 900, [GameStateManager.STATES.AI_AIM]);
         });
+        return true;
     }
 }
 window.ThrowController = ThrowController;

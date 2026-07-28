@@ -46,11 +46,11 @@ function setupEventListeners() {
 
     bindClick('btn-trick-shot', function(){
         var m = state.match;
-        if(!m || !m.active || m.paused || m.autoPaused || m.busy || m.turn !== 'player') return;
+        if(!m || !GameStateManager.canPlayerAim()) return;
         if(m.trickMeter < 100){ UIRenderer.toast('TRICK METER CHARGING'); SFX.miss(); return; }
-        m.trickArmed = !m.trickArmed;
-        updateTrickButtonArmedUI(m.trickArmed);
-        UIRenderer.toast(m.trickArmed ? 'TRICK SHOT ARMED — PULL BACK & RELEASE' : 'TRICK SHOT DISARMED');
+        var armed = GameStateManager.toggleTrickArmed();
+        updateTrickButtonArmedUI(armed);
+        UIRenderer.toast(armed ? 'TRICK SHOT ARMED — PULL BACK & RELEASE' : 'TRICK SHOT DISARMED');
         SFX.click();
     });
 
@@ -61,12 +61,12 @@ function setupEventListeners() {
             var type = btn.getAttribute('data-adjust');
             SFX.click();
             if(type === 'wind'){
-                m.wind = m.wind === 'LOW' ? 'MED' : (m.wind === 'MED' ? 'HIGH' : 'LOW');
+                if(GameStateManager.cycleWind() === null) return;
                 var wv = helper$('wind-value');
                 if (wv) wv.textContent = m.wind;
                 UIRenderer.toast('WIND SHIFTED: ' + m.wind);
             } else if(type === 'spin'){
-                m.spin = !m.spin;
+                if(GameStateManager.toggleSpin() === null) return;
                 var sv = helper$('spin-value');
                 if (sv) sv.textContent = m.spin ? 'ON' : 'OFF';
                 UIRenderer.toast('CURVE CONTROL ' + (m.spin ? 'ENGAGED' : 'DISENGAGED'));
@@ -83,14 +83,13 @@ function setupEventListeners() {
 
     bindClick('btn-pause', function(){
         var m = state.match;
-        if(!m || !m.active) return;
-        m.paused = true;
+        if(!m || !GameStateManager.pause()) return;
         UIRenderer.openModal('modal-pause');
         SFX.open();
     });
 
     bindClick('btn-resume', function(){
-        if(state.match) state.match.paused = false;
+        if(!GameStateManager.resume()) return;
         UIRenderer.closeModal('modal-pause');
         SFX.close();
     });
@@ -106,7 +105,7 @@ function setupEventListeners() {
 
     bindClick('btn-quit', function(){
         UIRenderer.closeModal('modal-pause');
-        endMatchCleanup();
+        GameStateManager.shutdownMatch(true);
         renderProfile();
         UIRenderer.showScreen('screen-menu');
     });
@@ -119,6 +118,7 @@ function setupEventListeners() {
 
     bindClick('btn-gameover-menu', function(){
         UIRenderer.closeModal('modal-gameover');
+        GameStateManager.shutdownMatch(true);
         UIRenderer.showScreen('screen-menu');
     });
 
@@ -161,7 +161,7 @@ function setupEventListeners() {
 
 function finishMatch(result){
     var m = state.match;
-    endMatchCleanup();
+    if(!m || !GameStateManager.finishMatch(result)) return;
     var playerScore = 10 - m.aiRemaining;
     var aiScore = 10 - m.playerRemaining;
     var icon = helper$('go-icon'), title = helper$('go-title'), sub = helper$('go-subtitle');
@@ -463,50 +463,25 @@ function runDiagnostics(){
 }
 
 function newMatchState(mode, opponent){
-    return {
-        mode: mode,
-        opponent: opponent,
-        active: true,
-        paused: false,
-        autoPaused: false,
-        timer: 90,
-        overtimeUsed: false,
-        playerRemaining: 10,
-        aiRemaining: 10,
-        power: 75,
-        powerDir: 1,
-        turn: 'player',
-        busy: false,
-        trickArmed: false,
-        trickMeter: 0,
-        wind: 'LOW',
-        spin: false,
-        attempts: 0,
-        hits: 0,
-        timerHandle: null,
-        powerHandle: null
-    };
+    return GameStateManager.createMatch(mode, opponent);
 }
 
 function startMatch(mode, opponent){
     UIRenderer.closePanel();
-    state.match = newMatchState(mode, opponent || 'CYBER_VOID');
+    GameStateManager.beginMatch(mode, opponent || 'CYBER_VOID');
     CupManager.buildCups();
     BallController.resetBallPosition('player');
     UIRenderer.showScreen('screen-game');
     Renderer.sizeAimSvg();
     resetAimHud();
+    GameStateManager.completeInitialization();
     
     startTimer();
     UIRenderer.toast((mode || 'QUICK').toUpperCase() + ' MATCH VS ' + (opponent || 'CYBER_VOID'));
 }
 
 function endMatchCleanup(){
-    var m = state.match;
-    if(!m) return;
-    if(m.timerHandle) clearInterval(m.timerHandle);
-    
-    m.active = false;
+    GameStateManager.shutdownMatch(false);
 }
 
 function startTimer(){
@@ -516,20 +491,15 @@ function startTimer(){
         timerEl.textContent = m.timer;
         timerEl.style.color = '#00f3ff';
     }
-    m.timerHandle = setInterval(function(){
-        if(m.paused || m.autoPaused || !m.active || m.busy) return;
-        m.timer--;
+    GameStateManager.startTimer(function(){
         if(timerEl) {
             if(m.timer <= 15) timerEl.style.color = '#ff5566';
             if(m.timer <= 0) timerEl.textContent = '00';
             else timerEl.textContent = m.timer < 10 ? '0'+m.timer : m.timer;
         }
         if(m.timer <= 5 && m.timer > 0) SFX.click();
-        if(m.timer <= 0){
-            clearInterval(m.timerHandle);
-            if(m.playerRemaining === m.aiRemaining && !m.overtimeUsed){
-                m.overtimeUsed = true;
-                m.timer = 30;
+    }, function(){
+            if(m.playerRemaining === m.aiRemaining && GameStateManager.startOvertime(30)){
                 if(timerEl) timerEl.style.color = '#ffd23f';
                 UIRenderer.toast('OVERTIME PROTOCOL ACTIVATED');
                 SFX.open();
@@ -537,8 +507,7 @@ function startTimer(){
             } else {
                 finishMatch(m.playerRemaining < m.aiRemaining ? 'win' : (m.aiRemaining < m.playerRemaining ? 'lose' : 'draw'));
             }
-        }
-    }, 1000);
+    });
 }
 
 // Ensure any missing UI functions that use original names are mapped to UIRenderer methods:

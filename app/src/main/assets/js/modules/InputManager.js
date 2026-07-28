@@ -59,8 +59,18 @@ class InputManager {
     }
 
     isReady(){
-      var m = state ? state.match : null;
-      return !!(m && m.active && !m.paused && !m.autoPaused && !m.busy && m.turn === 'player');
+      return !!(window.GameStateManager && GameStateManager.canPlayerAim());
+    }
+
+    cancelLifecycle(){
+      this.active = false;
+      this.pointerId = null;
+      this.target = null;
+      this.currentShotSolution = null;
+      this.cachedPull = null;
+      this.current = null;
+      this.pullStart = null;
+      if (window.Thrower) window.Thrower.resetInput();
     }
 
     reset(){
@@ -217,6 +227,10 @@ class InputManager {
         if(!self.active || e.pointerId !== self.pointerId) return;
         self.active = false;
         try { self.layerEl.releasePointerCapture(e.pointerId); } catch(err){}
+        if (!self.isReady()) {
+          self.cancelLifecycle();
+          return;
+        }
         
         if(self.phase === 'target'){
             self.phase = 'power';
@@ -246,7 +260,7 @@ class InputManager {
         if (window.Thrower) window.Thrower.resetInput();
         self.reset();
         
-        if (state && state.match) state.match.trickArmed = false;
+        if (window.GameStateManager) GameStateManager.disarmTrick();
         if(typeof updateTrickButtonArmedUI === 'function') updateTrickButtonArmedUI(false);
         if (sol && window.Thrower) Thrower.performPlayerThrow(sol);
       }
