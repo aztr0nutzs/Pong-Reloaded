@@ -3,16 +3,18 @@ class PhysicsConstants {
         gravity: 9.80665,
         airDensity: 1.225,
         dragCoefficient: 0.47,
-        tableRestitution: 0.82,
-        rimRestitution: 0.68,
-        cupWallRestitution: 0.35,
-        cupFloorRestitution: 0.18,
-        slideFriction: 0.28,
-        rollFriction: 0.015,
-        spinDecay: 0.6,
-        magnusAccelerationFactor: 0.00012,
-        stopSpeed: 0.015,
-        bounceStopSpeed: 0.08,
+        tableRestitution: 0.80,
+        rimRestitution: 0.60,
+        cupWallRestitution: 0.30,
+        cupFloorRestitution: 0.12,
+        slideFriction: 0.24,
+        rollFriction: 0.018,
+        spinDecay: 1.1,
+        magnusAccelerationFactor: 0.0045,
+        stopSpeed: 0.022,
+        bounceStopSpeed: 0.40,
+        cupStopVerticalSpeed: 0.035,
+        surfaceContactTolerance: 0.00005,
         fixedTimeStep: 1 / 120
     });
 }
@@ -187,6 +189,8 @@ class PhysicsEngine {
 
       this.STOP_SPEED = constants.stopSpeed;
       this.BOUNCE_STOP_SPEED = constants.bounceStopSpeed;
+      this.CUP_STOP_VERTICAL_SPEED = constants.cupStopVerticalSpeed;
+      this.SURFACE_CONTACT_TOLERANCE = constants.surfaceContactTolerance;
       this.FIXED_DT = constants.fixedTimeStep;
       
       this.liveSimulations = [];
@@ -374,7 +378,7 @@ class PhysicsEngine {
         s.angularVelocity = { x: s.angularVelocityX || 0, y: s.angularVelocityY || 0, z: s.angularVelocityZ || 0 };
         var table = this.world.geometry.table;
         s.onTable = !s.insideCup && this.isOverTable(s.x, s.y) &&
-            s.z <= table.surfaceHeight + 0.0005;
+            s.z <= table.surfaceHeight + this.SURFACE_CONTACT_TOLERANCE;
         s.offTable = !s.insideCup && !this.isOverTable(s.x, s.y);
         s.airborne = !s.insideCup && !s.onTable && s.z > table.groundHeight + 0.0005;
         s.surfaceState = s.insideCup ? 'cup' : (s.onTable ?
@@ -394,12 +398,12 @@ class PhysicsEngine {
         let horizontalSpeed = Math.hypot(s.vx, s.vy);
         if (s.insideCup) {
             let bottom = s.insideCup.colliders.bottomZ;
-            if (Math.abs(s.vz) < 0.025 && s.z <= bottom + 0.003 && horizontalSpeed < this.STOP_SPEED) {
+            if (Math.abs(s.vz) < this.CUP_STOP_VERTICAL_SPEED && s.z <= bottom + 0.003 && horizontalSpeed < this.STOP_SPEED) {
                 s.settled = true;
                 s.outcome = 'hit';
                 s.hitCupEl = s.insideCup.el;
             }
-        } else if (this.isOverTable(s.x, s.y) && s.z <= this.world.geometry.table.surfaceHeight + 0.0005 &&
+        } else if (this.isOverTable(s.x, s.y) && s.z <= this.world.geometry.table.surfaceHeight + this.SURFACE_CONTACT_TOLERANCE &&
             Math.abs(s.vz) < this.BOUNCE_STOP_SPEED && horizontalSpeed < this.STOP_SPEED) {
             s.settled = true;
             s.outcome = s.outcome || 'miss';
@@ -672,7 +676,7 @@ class PhysicsEngine {
         if (!s.insideCup) {
             let table = this.world.geometry.table;
             let tableHeight = table.surfaceHeight;
-            let wasSupported = s.z <= tableHeight + 0.0005 && this.isOverTable(s.x, s.y);
+            let wasSupported = s.z <= tableHeight + this.SURFACE_CONTACT_TOLERANCE && this.isOverTable(s.x, s.y);
             let crossingFraction = s.z > tableHeight && nextZ <= tableHeight ?
                 (s.z - tableHeight) / Math.max(s.z - nextZ, Number.EPSILON) : 1;
             let impactX = s.x + (nextX - s.x) * crossingFraction;
