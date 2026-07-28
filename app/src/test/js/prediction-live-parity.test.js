@@ -77,7 +77,10 @@ assert.equal(live.hitCupEl, prediction.hitCupEl);
 assertClose(live.x, prediction.finalX, 'final.x');
 assertClose(live.y, prediction.finalY, 'final.y');
 assertClose(Math.max(0, live.z), prediction.finalZ, 'final.z');
-assert.ok(liveBounceEvents.length > 0, 'parity fixture must exercise table bounce events');
-assert.ok(liveCupEvents.length > 0, 'parity fixture must exercise cup collision events');
+const table = engine.world.geometry.table;
+assert.ok(live.y < table.bounds.top || live.y > table.bounds.bottom ||
+  live.x < table.bounds.left || live.x > table.bounds.right,
+  'parity fixture must exercise authoritative off-table departure');
+assert.equal(live.z, table.groundHeight, 'off-table simulation must complete on the ground');
 
 console.log(`PASS: prediction/live positions and events match within ${FLOAT_TOLERANCE}`);

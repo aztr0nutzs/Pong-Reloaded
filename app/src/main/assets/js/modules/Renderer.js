@@ -101,21 +101,32 @@ class Renderer {
         else ctx.lineTo(px, py);
       }
       ctx.strokeStyle = color;
-      ctx.lineWidth = 3;
-      ctx.setLineDash([2, 10]);
-      ctx.globalAlpha = 0.95;
+      ctx.lineWidth = 6;
+      ctx.setLineDash([]);
+      ctx.globalAlpha = 0.16;
+      ctx.lineCap = 'round';
+      ctx.stroke();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2.25;
+      ctx.setLineDash([3, 7]);
+      ctx.globalAlpha = 0.92;
       ctx.lineCap = 'round';
       ctx.stroke();
       
       ctx.setLineDash([]);
       
       // Draw bounce markers
-      ctx.fillStyle = '#00f3ff';
-      ctx.globalAlpha = 0.8;
+      ctx.globalAlpha = 0.92;
       solution.bounceEvents.forEach(function(event){
         ctx.beginPath();
         var point = Renderer.worldToScreen(event);
-        ctx.arc(point.x, point.y, 3, 0, Math.PI*2);
+        ctx.arc(point.x, point.y, 5.5, 0, Math.PI*2);
+        ctx.strokeStyle = '#00f3ff';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(point.x, point.y, 2, 0, Math.PI*2);
+        ctx.fillStyle = '#ffffff';
         ctx.fill();
       });
       
@@ -159,6 +170,15 @@ class Renderer {
       ctx.arc(lx, ly, 3.5, 0, Math.PI*2);
       ctx.fillStyle = color;
       ctx.fill();
+
+      ctx.beginPath();
+      ctx.moveTo(lx - 21, ly); ctx.lineTo(lx - 12, ly);
+      ctx.moveTo(lx + 12, ly); ctx.lineTo(lx + 21, ly);
+      ctx.moveTo(lx, ly - 21); ctx.lineTo(lx, ly - 12);
+      ctx.moveTo(lx, ly + 12); ctx.lineTo(lx, ly + 21);
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
       
       ctx.globalAlpha = 1.0;
     }
@@ -207,13 +227,32 @@ class Renderer {
             let bx = screenPoint.x - br;
             let by = screenPoint.y - br;
             let scaleDepth = pt.scaleDepth || 1;
-            let shadowScale = pt.shadowScale || 1;
-            let shadowOpacity = pt.shadowOpacity || 1;
+            let heightRatio = Math.max(0, Math.min(1, iz / 0.30));
+            let shadowScale = 1 - heightRatio * 0.55;
+            let shadowOpacity = Math.max(0.08, 0.68 * (1 - heightRatio * 0.88));
+            let contactOpacity = Math.max(0, Math.min(0.82, 0.82 - heightRatio * 2.6));
+            let shadowBlur = 0.7 + heightRatio * 8.5;
+            let orientation = pt.orientation || { x:0, y:0, z:0 };
+            let spinAngle = (orientation.z + orientation.x * 0.35 - orientation.y * 0.35) * 180 / Math.PI;
+            let contactType = pt.contactState ? pt.contactState.type : 'none';
+            let isImpact = contactType === 'bounce' || contactType === 'floor-bounce' || contactType === 'rim' ||
+                contactType === 'hard-rebound' || contactType === 'interior-bounce';
+            let impactScale = isImpact ? 0.94 : 1;
+            let impactLight = isImpact ? 1.18 : 1;
             
-            let bTransform = 'translate3d(' + bx.toFixed(1) + 'px, ' + by.toFixed(1) + 'px, 0) scale(' + scaleDepth.toFixed(3) + ')';
+            let bTransform = 'translate3d(' + bx.toFixed(1) + 'px, ' + by.toFixed(1) + 'px, 0) scale(' + (scaleDepth * impactScale).toFixed(3) + ')';
             if (Renderer.lastBTransform !== bTransform) {
                 ball.style.transform = bTransform;
                 Renderer.lastBTransform = bTransform;
+            }
+            let spinValue = spinAngle.toFixed(1) + 'deg';
+            if (Renderer.lastBallSpin !== spinValue) {
+                ball.style.setProperty('--ball-spin', spinValue);
+                Renderer.lastBallSpin = spinValue;
+            }
+            if (Renderer.lastImpactLight !== impactLight) {
+                ball.style.setProperty('--impact-light', impactLight.toFixed(2));
+                Renderer.lastImpactLight = impactLight;
             }
             if (shadow) {
                 let groundPoint = Renderer.worldToScreen({ x: ix, y: iy, z: 0 });
@@ -222,8 +261,14 @@ class Renderer {
                 let sTransform = 'translate3d(' + sx.toFixed(1) + 'px, ' + sy.toFixed(1) + 'px, 0) scale(' + (scaleDepth * shadowScale).toFixed(3) + ')';
                 if (Renderer.lastSTransform !== sTransform) {
                     shadow.style.transform = sTransform;
-                    shadow.style.opacity = shadowOpacity.toFixed(2);
                     Renderer.lastSTransform = sTransform;
+                }
+                let shadowVisual = shadowOpacity.toFixed(2) + '|' + shadowBlur.toFixed(1) + '|' + contactOpacity.toFixed(2);
+                if (Renderer.lastShadowVisual !== shadowVisual) {
+                    shadow.style.opacity = shadowOpacity.toFixed(2);
+                    shadow.style.filter = 'blur(' + shadowBlur.toFixed(1) + 'px)';
+                    shadow.style.setProperty('--contact-opacity', contactOpacity.toFixed(2));
+                    Renderer.lastShadowVisual = shadowVisual;
                 }
             }
         }
