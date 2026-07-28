@@ -500,36 +500,9 @@
   .theme-space .cup-inner{ box-shadow:inset 0 0 10px currentColor, 0 0 6px currentColor; }
 </style>
 
-<script>
-window.addEventListener('load', function() {
-  const d = document.createElement('div');
-  d.id = 'debug-console';
-  d.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:30%; background:rgba(0,0,0,0.8); color:#0f0; font-family:monospace; font-size:10px; z-index:999999; overflow:auto; pointer-events:none;';
-  document.body.appendChild(d);
-  
-  function logMsg(msg, color) {
-    if(!document.getElementById('debug-console')) return;
-    const p = document.createElement('div');
-    p.style.color = color;
-    p.textContent = msg;
-    document.getElementById('debug-console').prepend(p);
-  }
-  
-  const oldLog = console.log;
-  console.log = function(...args) { logMsg(args.join(' '), '#0f0'); oldLog.apply(console, args); };
-  const oldErr = console.error;
-  console.error = function(...args) { logMsg(args.join(' '), '#f00'); oldErr.apply(console, args); };
-  const oldWarn = console.warn;
-  console.warn = function(...args) { logMsg(args.join(' '), '#ff0'); oldWarn.apply(console, args); };
-  
-  window.addEventListener('error', function(e) {
-    console.error('Global Error: ' + e.message + ' at ' + e.filename + ':' + e.lineno);
-  });
-});
-</script>
 </head>
 <body>
-<div id="app" class="carbon-texture">
+<div id="app">
 
   <!-- ============================================================ -->
   <!-- BOOT SCREEN -->

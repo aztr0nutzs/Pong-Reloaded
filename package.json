@@ -9,6 +9,9 @@
     "test:parity": "node app/src/test/js/prediction-live-parity.test.js",
     "test:state": "node app/src/test/js/game-state-manager.test.js",
     "test:ai": "node app/src/test/js/ai-determinism.test.js",
-    "test": "npm run test:state && npm run test:ai && npm run test:physics && npm run test:simulation && npm run test:throw && npm run test:parity"
+    "test:calibration": "node app/src/test/js/physics-calibration.test.js",
+    "test:renderer": "node app/src/test/js/renderer-visual-state.test.js",
+    "test:ui-contracts": "node app/src/test/js/ui-contracts.test.js",
+    "test": "npm run test:state && npm run test:ai && npm run test:physics && npm run test:calibration && npm run test:simulation && npm run test:throw && npm run test:parity && npm run test:renderer && npm run test:ui-contracts"
   }
 }

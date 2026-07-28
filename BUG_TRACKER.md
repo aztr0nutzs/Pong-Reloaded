@@ -2,12 +2,18 @@
 
 Statuses: **OPEN**, **BLOCKED**, **RESOLVED**, **VERIFIED**.
 
-| ID | Status | Area | Finding | Next action |
-|---|---|---|---|---|
-| BUILD-001 | BLOCKED | Gradle wrapper | Wrapper scripts/properties target Gradle 9.3.1, but the binary wrapper JAR is excluded to keep this PR text-only. | Regenerate it locally with `gradle wrapper --gradle-version 9.3.1 --distribution-type bin` before wrapper-based validation. |
-| BUILD-002 | RESOLVED | Build configuration | The configured Secrets plugin default file `.env.example` was absent, causing every Gradle task to fail during project evaluation. | Added a non-secret placeholder matching the existing configuration. |
-| TEST-001 | RESOLVED | Unit tests | Generated tests asserted `2 + 2`, referenced nonexistent `Greeting()`, and expected stale name `My Application`. | Replaced with asset/module/UI-contract and product-name tests. |
-| TEST-002 | RESOLVED | Instrumentation | Generated test expected namespace `com.example` as the installed package rather than the configured application ID. | Replaced with packaged identity, product-name, and asset smoke assertions. |
-| REPO-001 | RESOLVED | Repository layout | One-off patch, split, update, migration, and debug scripts were mixed with production root files. | Preserved under `tools/archive/` and marked non-production. |
-| ENV-001 | BLOCKED | Android SDK | No SDK environment variable or standard SDK installation was detected in the baseline environment. | Install/configure an SDK containing platform Android 36 (minor API 1 as configured) and compatible build-tools, then rerun Gradle validation. |
-| SCM-001 | BLOCKED | Upstream sync | Repository has no configured `origin`, so `git fetch origin --prune` and rebase onto `origin/main` cannot run. | Configure the correct remote and rebase before integration. |
+| ID | Priority | Status | Area | Finding | Next action/evidence |
+|---|---|---|---|---|---|
+| BUILD-001 | P0 | OPEN | Gradle wrapper | Wrapper scripts/properties target Gradle 9.3.1, but `gradle/wrapper/gradle-wrapper.jar` is absent; requested wrapper commands cannot start. | Restore the official 9.3.1 wrapper JAR in a dedicated build-system PR, then rerun both wrapper commands. |
+| BUILD-002 | P0 | OPEN | Debug signing | `app/build.gradle.kts` selects `${rootDir}/debug.keystore`, but the repository does not contain that file. | Prefer a dedicated build PR that uses Android's standard generated debug signing configuration; do not commit production credentials. |
+| BUILD-003 | P0 | RESOLVED | Secrets defaults | Empty `GEMINI_API_KEY=` generated invalid Java: `public static final String GEMINI_API_KEY = ;`. | Non-secret `DEFAULT_API_KEY` now generates a valid quoted default; external Gradle compilation and assembly passed. |
+| UI-001 | P0 | RESOLVED | Module contract | `UIRenderer` methods were exported individually, but `window.UIRenderer` was undefined, so guarded boot navigation never entered the menu. | Exported the controller and added contract coverage; browser boot/menu QA passed. |
+| UI-002 | P0 | RESOLVED | UI preservation | A development console obscured the top 30% of every screen, and the table texture class dimmed the entire root application. | Removed only the debug injection and misplaced root class; retained the intended table texture element and approved screen structure. |
+| STATE-001 | P0 | RESOLVED | Boot lifecycle | Manual boot skip left the animation callback alive; it could reopen the menu after a match entered `PLAYER_AIM`. | Boot completion is one-shot; browser match initialization remains on the game screen. |
+| UI-003 | P1 | RESOLVED | HUD contracts | `UIRenderer` referenced five nonexistent legacy DOM IDs, leaving score, accuracy, stats, and trick progress disconnected. | Bound approved current IDs and verified score/accuracy/toast/trick-segment initialization in browser QA. |
+| TEST-001 | P1 | VERIFIED | Deterministic regression | Fixed-step, collision, throw-control independence, prediction/live parity, lifecycle, and AI repeatability require regression coverage. | All Node suites passed in the final regression. |
+| TEST-002 | P2 | BLOCKED | Robolectric network | Robolectric's Android 16 instrumented JAR fetch initially failed because the forked test JVM lacked proxy properties. | Test passed after providing the environment proxy as `JAVA_TOOL_OPTIONS`; CI should propagate equivalent network settings or pre-cache the artifact. |
+| ANDROID-001 | P1 | BLOCKED | Runtime QA | No Android device/emulator was available for WebView, cutout, system-bar, pause/background, and packaging smoke QA. | Run the documented portrait matrix on API 28 and API 36 before release. |
+| ASSET-001 | P2 | OPEN | Offline presentation | Google Fonts and Material Symbols remain remote dependencies; the browser QA environment displayed fallback glyph text when certificate trust blocked them. | Verify normal Android network loading and decide in a separate asset PR whether production must package fonts/icons locally. |
+| FIREBASE-001 | P2 | BLOCKED | Firebase configuration | `google-services.json` is absent; debug build continues under the configured warning strategy. | Supply the environment-specific file securely before validating Firebase-backed behavior. |
+| SCM-001 | P0 | BLOCKED | Upstream sync | Repository has no configured `origin`, so fetch/rebase and open-PR conflict inspection cannot run. | Configure the correct remote and rebase onto `origin/main` before integration. |

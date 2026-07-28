@@ -206,8 +206,10 @@ function runBoot(){
     var li = 0;
     var targetPct = 0;
     var lastUpdate = performance.now();
+    var started = false;
     
     function bootLoop(time) {
+        if (started) return;
         if (time - lastUpdate > 100 && targetPct < 100) {
             targetPct += rand(8, 20);
             if (targetPct > 100) targetPct = 100;
@@ -223,6 +225,7 @@ function runBoot(){
         if(newLi !== li){ li = newLi; if(label) label.textContent = labels[li]; }
         
         if(pct >= 100){
+            started = true;
             setTimeout(function(){ enterMenu(); }, 300);
             return;
         }
@@ -230,7 +233,6 @@ function runBoot(){
         requestAnimationFrame(bootLoop);
     }
     
-    var started = false;
     bindClick('screen-boot', function(){
         if(started) return;
         started = true;

@@ -1,6 +1,20 @@
 
 class UIRenderer {
 
+    static toast(message) {
+        var stack = document.getElementById('toast-stack');
+        if (!stack) return;
+        var el = document.createElement('div');
+        el.className = 'toast';
+        el.textContent = message;
+        stack.appendChild(el);
+        requestAnimationFrame(function() { el.classList.add('show'); });
+        setTimeout(function() {
+            el.classList.remove('show');
+            setTimeout(function() { el.remove(); }, 300);
+        }, 1700);
+    }
+
     static showScreen(id) {
         qsa('.screen').forEach(s => s.classList.remove('active'));
         var el = document.getElementById(id);
@@ -34,16 +48,15 @@ class UIRenderer {
     static DOM = { initialized: false };
     static initDOM() {
         if (UIRenderer.DOM.initialized) return;
-        UIRenderer.DOM.statsHudEl = document.getElementById('stats-hud');
+        UIRenderer.DOM.statsHudEl = document.getElementById('aim-stats-hud');
         UIRenderer.DOM.arcFillEl = document.getElementById('arc-fill');
         UIRenderer.DOM.spinFillEl = document.getElementById('spin-fill');
         UIRenderer.DOM.releaseFillEl = document.getElementById('release-fill');
         UIRenderer.DOM.releaseReadoutEl = document.getElementById('release-readout');
-        UIRenderer.DOM.pScore = document.getElementById('score-player');
-        UIRenderer.DOM.aScore = document.getElementById('score-ai');
-        UIRenderer.DOM.turnInd = document.getElementById('turn-indicator');
+        UIRenderer.DOM.score = document.getElementById('game-score');
+        UIRenderer.DOM.accuracy = document.getElementById('game-accuracy');
         UIRenderer.DOM.trickBtn = document.getElementById('btn-trick-shot');
-        UIRenderer.DOM.trickFill = document.getElementById('trick-fill');
+        UIRenderer.DOM.trickSegments = document.getElementById('trick-segments');
         UIRenderer.DOM.hintEl = document.getElementById('aim-hint');
         UIRenderer.DOM.powerReadoutEl = document.getElementById('power-readout');
         UIRenderer.DOM.initialized = true;
@@ -54,31 +67,26 @@ class UIRenderer {
         
         var m = state.match;
         if(m) {
-            if (UIRenderer.DOM.pScore) {
-                let pv = 10 - m.aiRemaining;
-                if (UIRenderer.lastPScore !== pv) {
-                    UIRenderer.DOM.pScore.textContent = pv;
-                    UIRenderer.lastPScore = pv;
-                }
+            let scoreText = String(m.score.player).padStart(2, '0') + ' : ' + String(m.score.ai).padStart(2, '0');
+            if (UIRenderer.DOM.score && UIRenderer.lastScoreText !== scoreText) {
+                UIRenderer.DOM.score.textContent = scoreText;
+                UIRenderer.lastScoreText = scoreText;
             }
-            if (UIRenderer.DOM.aScore) {
-                let av = 10 - m.playerRemaining;
-                if (UIRenderer.lastAScore !== av) {
-                    UIRenderer.DOM.aScore.textContent = av;
-                    UIRenderer.lastAScore = av;
-                }
+            let accuracyText = 'ACC: ' + m.accuracy + '%';
+            if (UIRenderer.DOM.accuracy && UIRenderer.lastAccuracyText !== accuracyText) {
+                UIRenderer.DOM.accuracy.textContent = accuracyText;
+                UIRenderer.lastAccuracyText = accuracyText;
             }
-            if (UIRenderer.DOM.turnInd) {
-                let tText = m.turn === 'player' ? 'YOUR TURN' : 'AI TURN';
-                let tColor = m.turn === 'player' ? '#00f3ff' : '#ff5566';
-                if (UIRenderer.lastTurnText !== tText) {
-                    UIRenderer.DOM.turnInd.textContent = tText;
-                    UIRenderer.DOM.turnInd.style.color = tColor;
-                    UIRenderer.lastTurnText = tText;
+            if (UIRenderer.DOM.trickSegments && UIRenderer.lastTrickMeter !== m.trickMeter) {
+                if (!UIRenderer.DOM.trickSegments.children.length) {
+                    for (let index = 0; index < 10; index++) {
+                        UIRenderer.DOM.trickSegments.appendChild(document.createElement('div'));
+                    }
                 }
-            }
-            if (UIRenderer.DOM.trickFill && UIRenderer.lastTrickMeter !== m.trickMeter) {
-                UIRenderer.DOM.trickFill.style.width = m.trickMeter + '%';
+                let litSegments = Math.ceil(m.trickMeter / 10);
+                Array.from(UIRenderer.DOM.trickSegments.children).forEach(function(segment, index) {
+                    segment.classList.toggle('lit', index < litSegments);
+                });
                 UIRenderer.lastTrickMeter = m.trickMeter;
                 
                 if (UIRenderer.DOM.trickBtn) {
@@ -154,6 +162,7 @@ class UIRenderer {
     }
 
 }
+window.UIRenderer = UIRenderer;
 window.toast = UIRenderer.toast;
 window.showScreen = UIRenderer.showScreen;
 window.openPanel = UIRenderer.openPanel;
