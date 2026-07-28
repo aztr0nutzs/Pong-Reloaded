@@ -189,7 +189,6 @@ class GameStateManager {
         if (!m || m.activeThrow !== 'ai' || GameStateManager.lifecycle !== GameStateManager.STATES.BALL_ACTIVE) return null;
         return m.aiDecisionIndex++;
     }
-
     static resolveThrow(side, hit, cupKey) {
         var m = GameStateManager.state.match;
         if (!m || m.activeThrow !== side || GameStateManager.lifecycle !== GameStateManager.STATES.BALL_ACTIVE ||
