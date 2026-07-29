@@ -3,6 +3,7 @@
 build/
 **/build/
 local.properties
+gradle/wrapper/gradle-wrapper.jar
 
 # IDE metadata
 .idea/
