@@ -19,9 +19,14 @@ Linux / Codex environment:
 
 ```bash
 chmod +x tools/bootstrap-gradle-wrapper.sh
+chmod +x tools/bootstrap-android-sdk.sh
 ./tools/bootstrap-gradle-wrapper.sh
-./gradlew testDebugUnitTest
-./gradlew assembleDebug
+./tools/bootstrap-android-sdk.sh "$HOME/android-sdk"
+export ANDROID_HOME="$HOME/android-sdk"
+export ANDROID_SDK_ROOT="$ANDROID_HOME"
+export PATH="$ANDROID_HOME/platform-tools:$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
+./gradlew testDebugUnitTest --stacktrace
+./gradlew assembleDebug --stacktrace
 ```
 
 Windows PowerShell:
@@ -33,6 +38,10 @@ powershell -ExecutionPolicy Bypass -File tools/bootstrap-gradle-wrapper.ps1
 ```
 
 Run the bootstrap once after cloning and again only when the pinned wrapper version changes or the local wrapper JAR is removed. The generated `gradle/wrapper/gradle-wrapper.jar` is ignored by Git. A normal desktop/repository workflow may later choose to commit the verified official wrapper JAR in a separate change that supports binary files; this text-only PR does not make the repository immediately self-contained before bootstrap.
+
+The Android SDK bootstrap installs the command-line tools and only the packages required for this build into the optional absolute path argument, which defaults to `$HOME/android-sdk`. It reads the compile SDK requirement from `app/build.gradle.kts`, verifies Google's published command-line tools checksum, and never creates `local.properties` or installs an emulator image.
+
+The pinned Linux archive is `commandlinetools-linux-15859902_latest.zip` (command-line tools 22.0), downloaded from `https://dl.google.com/android/repository/` and verified against Google's published SHA-256 `4e4c464f145a7512b57d088ac6c278c03c9eea610886b35a5e0804e74eedf583`. For the current project it installs `platform-tools`, `platforms;android-36.1`, and `build-tools;36.0.0`.
 
 The debug APK is produced under `app/build/outputs/apk/debug/` after a successful assembly.
 
