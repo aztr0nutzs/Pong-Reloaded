@@ -4,7 +4,7 @@ Statuses: **OPEN**, **BLOCKED**, **RESOLVED**, **VERIFIED**.
 
 | ID | Priority | Status | Area | Finding | Next action/evidence |
 |---|---|---|---|---|---|
-| BUILD-001 | P0 | VERIFIED WITH SECURE LOCAL BOOTSTRAP | Gradle wrapper | The text-only bootstrap downloads the official pinned Gradle distribution, verifies its SHA-256, generates the ignored wrapper JAR locally, and validates the wrapper. | Shell bootstrap and `./gradlew --version` passed; PowerShell implementation passed static review but runtime validation requires a Windows host. |
+| BUILD-001 | P0 | VERIFIED WITH SECURE LOCAL BOOTSTRAP | Gradle wrapper | The text-only bootstrap downloads the official pinned Gradle distribution, verifies its SHA-256, generates the ignored wrapper JAR locally, and validates the wrapper. | Shell bootstrap and `./gradlew --version` passed; PowerShell implementation requires validation on a Windows host. |
 | BUILD-002 | P0 | VERIFIED | Debug signing | Debug builds use Android's standard generated debug keystore; release signing remains environment-driven and separate. | `validateSigningDebug` and `assembleDebug` passed without a root `debug.keystore`. |
 | BUILD-003 | P0 | VERIFIED | Android SDK bootstrap/environment validation | The secure text-only bootstrap installed command-line tools 22.0, `platform-tools`, `platforms;android-36.1`, and `build-tools;36.0.0` outside the repository. | Unit tests and debug assembly passed; the APK identity, SDK levels, size, and SHA-256 were verified. |
 | BUILD-004 | P0 | RESOLVED | Secrets defaults | Empty `GEMINI_API_KEY=` generated invalid Java: `public static final String GEMINI_API_KEY = ;`. | Non-secret `DEFAULT_API_KEY` now generates a valid quoted default; external Gradle compilation and assembly passed. |
